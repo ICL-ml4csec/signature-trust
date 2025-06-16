@@ -1,0 +1,21 @@
+name: "Commit Verification"
+description: "Verifies commit signatures for both repository commits and third-party dependencies"
+
+inputs:
+  repository:
+    description: "The full GitHub repository (e.g. owner/repo)"
+    required: true
+  branch:
+    description: "The branch name"
+    required: true
+  token:
+    description: "GitHub token"
+    required: true
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ inputs.repository }}
+    - ${{ inputs.branch }}
+    - ${{ inputs.token }}
