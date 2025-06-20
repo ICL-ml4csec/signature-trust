@@ -1,0 +1,6 @@
+typer
+httpx==0.27.2
+# Testing having a comment 
+python-dotenv==1.0.1
+dataclasses-json==0.6.7
+tabulate>=0.8.8

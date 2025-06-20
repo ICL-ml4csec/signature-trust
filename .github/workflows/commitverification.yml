@@ -1,0 +1,29 @@
+name: Commit Verification
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build Thirdparties Package
+
+        run: go build ./checkthirdparties
+
+      - name: Run Go Vet
+        run: go vet ./checkthirdparties
+
+      - name: Run Go Action
+        uses: ./
+        with:
+          repository: ${{ github.repository }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
