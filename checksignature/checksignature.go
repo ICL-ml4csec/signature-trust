@@ -53,5 +53,5 @@ func CheckSignature(url string, token string) {
 	}
 
 	percentage := (verified / total) * 100
-	fmt.Printf("Verified commits: %.2f%%\n", percentage)
+	fmt.Printf("Verified commits: %.2f%%\n\n", percentage)
 }

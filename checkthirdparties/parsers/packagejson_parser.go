@@ -12,13 +12,18 @@ import (
 )
 
 type PackageJSON struct {
-	Dependencies map[string]string `json:"dependencies"`
+	Dependencies    map[string]string `json:"dependencies"`
+	DevDependencies map[string]string `json:"devDependencies"`
 }
 
 type NpmPackageResponse struct {
 	Repository struct {
 		URL string `json:"url"`
 	} `json:"repository"`
+	Versions map[string]interface{} `json:"versions"`
+	DistTags struct {
+		Latest string `json:"latest"`
+	} `json:"dist-tags"`
 }
 
 func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
@@ -40,62 +45,73 @@ func ParsePackageJSON(file string, token string) error {
 		return fmt.Errorf("error parsing package.json: %v", err)
 	}
 
-	for pkg, version := range packageJSON.Dependencies {
-		url := fmt.Sprintf("https://registry.npmjs.org/%s", pkg)
-		resp, err := client.DoGet(url, token)
-		if err != nil {
-			fmt.Printf("Error fetching NPM metadata: %v\n", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Printf("Error reading response body: %v\n", err)
-			continue
-		}
-
-		var npmResp NpmPackageResponse
-		if err := json.Unmarshal(body, &npmResp); err != nil {
-			fmt.Printf("Error parsing NPM JSON for %s: %v\n", pkg, err)
-			continue
-		}
-
-		repoURL := extractRepoURLFromNpm(npmResp)
-
-		normalizedRepo := helpers.CleanGitHubURL(repoURL)
-		if normalizedRepo == "" {
-			fmt.Printf("No repository URL found for %s\n", pkg)
-			continue
-		}
-
-		cleanVersion := helpers.CleanVersion(version)
-		versionsToTry := []string{
-			cleanVersion,
-			"v" + cleanVersion,
-		}
-
-		var sha string
-		var shaErr error
-		for _, version := range versionsToTry {
-			sha, shaErr = helpers.GetSHAFromTag(normalizedRepo, version, token)
-			if shaErr == nil {
-				break
+	processDeps := func(depType string, deps map[string]string) {
+		for pkg, version := range deps {
+			url := fmt.Sprintf("https://registry.npmjs.org/%s", pkg)
+			resp, err := client.DoGet(url, token)
+			if err != nil {
+				fmt.Printf("[%s] Error fetching NPM metadata for %s: %v\n", depType, pkg, err)
+				continue
 			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				fmt.Printf("[%s] Error reading response body for %s: %v\n", depType, pkg, err)
+				continue
+			}
+
+			var npmResp NpmPackageResponse
+			if err := json.Unmarshal(body, &npmResp); err != nil {
+				fmt.Printf("[%s] Error parsing NPM JSON for %s: %v\n", depType, pkg, err)
+				continue
+			}
+
+			resolved := helpers.ResolveVersion(version, npmResp.Versions)
+			if resolved == "" {
+				fmt.Printf("[%s] Could not resolve version for %s — falling back to latest\n", depType, pkg)
+				resolved = npmResp.DistTags.Latest
+				if resolved == "" {
+					fmt.Printf("[%s] Still no version resolved for %s\n", depType, pkg)
+					continue
+				}
+			}
+
+			repoURL := extractRepoURLFromNpm(npmResp)
+
+			normalizedRepo := helpers.CleanGitHubURL(repoURL)
+			if normalizedRepo == "" {
+				fmt.Printf("[%s] No repository URL found for %s\n", depType, pkg)
+				continue
+			}
+
+			versionsToTry := []string{resolved, "v" + resolved}
+			var sha string
+			var shaErr error
+			for _, v := range versionsToTry {
+				sha, shaErr = helpers.GetSHAFromTag(normalizedRepo, v, token)
+				if shaErr == nil {
+					resolved = v
+					break
+				}
+			}
+
+			if shaErr != nil {
+				fmt.Printf("[%s] Error getting SHA for %s@%s: %v\n", depType, pkg, resolved, shaErr)
+				continue
+			}
+
+			fmt.Printf("Manifest: package.json (%s)\n", depType)
+			fmt.Printf("Package: %s Version: %s\n", pkg, resolved)
+			fmt.Printf("Repository URL: %s\n", normalizedRepo)
+
+			commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", normalizedRepo, sha)
+			checksignature.CheckSignature(commitsURL, token)
 		}
-
-		if shaErr != nil {
-			fmt.Printf("Error getting SHA for %s@%s: %v\n", pkg, cleanVersion, shaErr)
-			continue
-		}
-
-		fmt.Printf("\nManifest: package.json\n")
-		fmt.Printf("Package: %s Version: %s\n", pkg, cleanVersion)
-		fmt.Printf("Repository URL: %s\n", normalizedRepo)
-
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", normalizedRepo, sha)
-		checksignature.CheckSignature(commitsURL, token)
 	}
+
+	processDeps("dependencies", packageJSON.Dependencies)
+	processDeps("devDependencies", packageJSON.DevDependencies)
 
 	return nil
 }
