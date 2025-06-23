@@ -12,7 +12,7 @@ import (
 	"github.com/hannajonsd/git-signature-test/checkthirdparties/helpers"
 )
 
-type PyPIResponse struct {
+type pypiResponse struct {
 	Info struct {
 		ProjectURLs map[string]string `json:"project_urls"`
 		HomePage    string            `json:"home_page"`
@@ -33,18 +33,18 @@ func parseRequirementLine(line string) (string, string) {
 	return strings.TrimSpace(line), ""
 }
 
-func extractRepoURL(pypiresp PyPIResponse) string {
-	if url, ok := pypiresp.Info.ProjectURLs["Homepage"]; ok && url != "" {
+func extractRepoURLFromPyPI(pypiResp pypiResponse) string {
+	if url, ok := pypiResp.Info.ProjectURLs["Homepage"]; ok && url != "" {
 		return url
 	}
-	if url, ok := pypiresp.Info.ProjectURLs["Source"]; ok && url != "" {
+	if url, ok := pypiResp.Info.ProjectURLs["Source"]; ok && url != "" {
 		return url
 	}
-	if url, ok := pypiresp.Info.ProjectURLs["Repository"]; ok && url != "" {
+	if url, ok := pypiResp.Info.ProjectURLs["Repository"]; ok && url != "" {
 		return url
 	}
-	if pypiresp.Info.HomePage != "" {
-		return pypiresp.Info.HomePage
+	if pypiResp.Info.HomePage != "" {
+		return pypiResp.Info.HomePage
 	}
 	return ""
 }
@@ -85,18 +85,18 @@ func ParseRequirements(file string, token string) error {
 			continue
 		}
 
-		var pypiresp PyPIResponse
-		if err := json.Unmarshal(body, &pypiresp); err != nil {
+		var pypiResp pypiResponse
+		if err := json.Unmarshal(body, &pypiResp); err != nil {
 			fmt.Printf("Error parsing PyPI JSON: %v\n", err)
 			continue
 		}
 
 		if version == "" {
-			version = pypiresp.Info.Version
+			version = pypiResp.Info.Version
 			fmt.Printf("No version specified. Using latest from PyPI: %s\n", version)
 		}
 
-		repoURL := extractRepoURL(pypiresp)
+		repoURL := extractRepoURLFromPyPI(pypiResp)
 		if repoURL == "" {
 			fmt.Printf("No repository URL found for %v\n", packageName)
 			continue
@@ -105,12 +105,12 @@ func ParseRequirements(file string, token string) error {
 		normalizedRepo := helpers.CleanGitHubURL(repoURL)
 
 		fmt.Printf("Manifest: requirements.txt\n")
-		fmt.Printf("Package: %s %s\n", packageName, version)
+		fmt.Printf("Package: %s Version: %s\n", packageName, version)
 		fmt.Printf("Repository URL: %s\n", normalizedRepo)
 
 		sha, err := helpers.GetSHAFromTag(normalizedRepo, version, token)
 		if err != nil {
-			fmt.Printf("%v\n", err)
+			fmt.Printf("Error getting SHA for %s@%s: %v\n", packageName, version, err)
 			continue
 		}
 

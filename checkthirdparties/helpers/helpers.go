@@ -59,9 +59,18 @@ func FileExists(filename string) bool {
 }
 
 func CleanGitHubURL(url string) string {
+	url = strings.TrimPrefix(url, "git+")
+	url = strings.TrimPrefix(url, "git://")
 	url = strings.TrimPrefix(url, "https://")
-	url = strings.TrimPrefix(url, "github.com/")
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.Replace(url, "github.com/", "", 1)
 	url = strings.TrimSuffix(url, ".git")
 	url = strings.TrimSuffix(url, "/")
 	return url
+}
+
+func CleanVersion(version string) string {
+	version = strings.TrimSpace(version)
+	version = strings.TrimLeft(version, "^~>=< ")
+	return version
 }
