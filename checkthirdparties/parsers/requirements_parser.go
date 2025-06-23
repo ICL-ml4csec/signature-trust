@@ -70,7 +70,6 @@ func ParseRequirements(file string, token string) error {
 		}
 
 		pypiURL := fmt.Sprintf("https://pypi.org/pypi/%s/json", packageName)
-		fmt.Printf("\nFetching PyPI data for: %s\n", pypiURL)
 
 		resp, err := http.Get(pypiURL)
 		if err != nil {
@@ -110,7 +109,7 @@ func ParseRequirements(file string, token string) error {
 
 		sha, err := helpers.GetSHAFromTag(normalizedRepo, version, token)
 		if err != nil {
-			fmt.Printf("Error getting SHA for %s@%s: %v\n", packageName, version, err)
+			fmt.Printf("Error getting SHA for %s@%s: %v\n\n", packageName, version, err)
 			continue
 		}
 

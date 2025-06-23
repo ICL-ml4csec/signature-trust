@@ -23,6 +23,6 @@ func main() {
 
 	checksignature.CheckSignature(url, token)
 
-	fmt.Printf("\nChecking third-party libraries in manifest files...\n")
+	fmt.Printf("Checking third-party libraries in manifest files...\n")
 	checkthirdparties.CheckThirdParties(token)
 }
