@@ -95,32 +95,56 @@ Checking commits for repository: ICL-ml4csec/msc-hmj24 on branch: feature/commit
 Verified commits: 50.00%
 
 Manifest: go.mod
-Package: gorilla/mux v1.8.1
+Package: gorilla/mux Version: v1.8.1
 Repository URL: gorilla/mux
 Verified commits: 93.33%
 
-Fetching PyPI data for: https://pypi.org/pypi/tabulate/json
 Manifest: requirements.txt
-Package: tabulate 0.8.8
-Repository URL: astanin/python-tabulate
+Package: python-dotenv Version: 1.0.1
+Repository URL: theskumar/python-dotenv
 Verified commits: 63.33%
+
+Manifest: package.json (dependencies)
+Package: debug Version: 4.4.1
+Repository URL: debug-js/debug
+Verified commits: 60.00%
+
+Manifest: package.json (devDependencies)
+Package: eslint-plugin-import Version: 2.32.0
+Repository URL: import-js/eslint-plugin-import
+Verified commits: 96.67%
 ```
 
 
 ## What the tool checks today
 
 * **Repository commits:** Percentage of GPG/SSH‑signed commits for the last 100 commits on the target branch.
-* **`go.mod`** – For each dependency:
 
+* **`go.mod`** – For each Go module:
   * Extracts the module path and version.
-  * Resolves the corresponding tag → commit SHA.
-  * Calculates the percentage of signed commits (last 30) on that commit’s branch.
-* **`requirements.txt`** – Same flow for Python packages, using the PyPI API to locate their GitHub repo.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the last 30 commits on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
+
+* **`requirements.txt`** - For each Python package:
+  * Parses the package name and version (or falls back to the latest).
+  * Retrieves metadata from the PyPI registry.
+  * Extracts and normalizes the GitHub repository URL.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the last 30 commits on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
+
+* **`package.json`** - For each npm package in dependencies and devDependencies:
+  * Parses the package name and version (including support for ranges like ^1.2.3, ~1.2.0, 1.2.x, etc.).
+  * Retrieves metadata from the npm registry.
+  * Extracts and normalizes the GitHub repository URL.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the last 30 commits on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
 
 
 ## Next Steps
-
-* Parse additional manifest types (`package.json`, `cargo.toml`, `pom.xml`, …) and edge‑cases in existing parsers.
+* Parse additional manifest types (`cargo.toml`, `pom.xml`, …) and edge‑cases in existing parsers.
 * Introduce configurable trust policies (e.g. min percentage required).
 * Evaluate on a set of open-source repositories.
 
