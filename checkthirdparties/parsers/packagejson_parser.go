@@ -69,10 +69,20 @@ func ParsePackageJSON(file string, token string) error {
 
 			resolved := helpers.ResolveVersion(version, npmResp.Versions)
 			if resolved == "" {
-				fmt.Printf("[%s] Could not resolve version for %s — falling back to latest\n", depType, pkg)
+				switch {
+				case version == "":
+					fmt.Printf("[WARN] No version specified for %q — using latest stable version\n", pkg)
+				case version == "*" || version == "latest" || version == "X" || version == "x":
+					fmt.Printf("[INFO] %q uses wildcard: %q — resolving to latest stable version\n", pkg, "*")
+				case helpers.IsValidSemver(version) && helpers.IsPrerelease(version):
+					fmt.Printf("[INFO] Requested version %q for %q is a prerelease — using latest stable version\n", version, pkg)
+				default:
+					fmt.Printf("[WARN] Could not resolve version %q for %q — falling back to latest\n", version, pkg)
+				}
+
 				resolved = npmResp.DistTags.Latest
 				if resolved == "" {
-					fmt.Printf("[%s] Still no version resolved for %s\n", depType, pkg)
+					fmt.Printf("[ERROR] No version could be resolved for %q\n", pkg)
 					continue
 				}
 			}

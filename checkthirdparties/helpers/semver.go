@@ -1,0 +1,318 @@
+package helpers
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+func IsValidSemver(version string) bool {
+	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z\-\.]+)?(?:\+[\da-zA-Z\-\.]+)?$`)
+	return semverRegex.MatchString(version)
+}
+
+func IsPrerelease(version string) bool {
+	return strings.Contains(version, "-")
+}
+
+func isWildcard(requested string) bool {
+	return strings.HasSuffix(requested, ".x") || strings.HasSuffix(requested, ".*") || requested == "x" || requested == "X" || strings.HasSuffix(requested, "x") || strings.HasSuffix(requested, "X")
+}
+
+func parseSemverParts(version string) [3]int {
+	if idx := strings.Index(version, "-"); idx != -1 {
+		version = version[:idx]
+	}
+	parts := strings.Split(version, ".")
+	var res [3]int
+	for i := 0; i < len(parts) && i < 3; i++ {
+		n, err := strconv.Atoi(parts[i])
+		if err != nil {
+			fmt.Printf("[WARN] Invalid semver part '%s' in version '%s', defaulting to 0\n", parts[i], version)
+			return [3]int{}
+		}
+		res[i] = n
+	}
+	return res
+}
+
+func semverLess(a, b string) bool {
+	as := parseSemverParts(a)
+	bs := parseSemverParts(b)
+	for i := 0; i < 3; i++ {
+		if as[i] != bs[i] {
+			return as[i] < bs[i]
+		}
+	}
+	return false
+}
+
+func toVersionSet(list []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(list))
+	for _, v := range list {
+		m[v] = struct{}{}
+	}
+	return m
+}
+
+func intersect(a, b map[string]struct{}) map[string]struct{} {
+	result := make(map[string]struct{})
+	for k := range a {
+		if _, found := b[k]; found {
+			result[k] = struct{}{}
+		}
+	}
+	return result
+}
+
+func applyComparator(cmp string, versions []string) []string {
+	cmp = strings.TrimSpace(cmp)
+	var result []string
+
+	switch {
+	case strings.HasPrefix(cmp, ">="):
+		bound := strings.TrimPrefix(cmp, ">=")
+		for _, v := range versions {
+			if !semverLess(v, bound) {
+				result = append(result, v)
+			}
+		}
+	case strings.HasPrefix(cmp, ">"):
+		bound := strings.TrimPrefix(cmp, ">")
+		for _, v := range versions {
+			if semverLess(bound, v) {
+				result = append(result, v)
+			}
+		}
+	case strings.HasPrefix(cmp, "<="):
+		bound := strings.TrimPrefix(cmp, "<=")
+		for _, v := range versions {
+			if !semverLess(bound, v) {
+				result = append(result, v)
+			}
+		}
+	case strings.HasPrefix(cmp, "<"):
+		bound := strings.TrimPrefix(cmp, "<")
+		for _, v := range versions {
+			if semverLess(v, bound) {
+				result = append(result, v)
+			}
+		}
+	default:
+		for _, v := range versions {
+			if v == cmp {
+				result = append(result, v)
+			}
+		}
+	}
+	return result
+}
+
+func normaliseUpperLimit(v string) string {
+	parts := strings.Split(v, ".")
+	switch len(parts) {
+	case 1:
+		major, _ := strconv.Atoi(parts[0])
+		return fmt.Sprintf("%d.0.0-0", major+1)
+	case 2:
+		major, _ := strconv.Atoi(parts[0])
+		minor, _ := strconv.Atoi(parts[1])
+		return fmt.Sprintf("%d.%d.0-0", major, minor+1)
+	case 3:
+		major, _ := strconv.Atoi(parts[0])
+		minor, _ := strconv.Atoi(parts[1])
+		patch, _ := strconv.Atoi(parts[2])
+		return fmt.Sprintf("%d.%d.%d-0", major, minor, patch+1)
+	default:
+		return v + "-0"
+	}
+}
+
+// Version Resolver Functions
+func resolveLogicalOr(requested string, versions map[string]interface{}) string {
+	parts := strings.Split(requested, "||")
+	var candidates []string
+	for _, part := range parts {
+		resolved := ResolveVersion(strings.TrimSpace(part), versions)
+		if resolved != "" {
+			candidates = append(candidates, resolved)
+		}
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return semverLess(candidates[i], candidates[j])
+	})
+	return candidates[len(candidates)-1]
+}
+
+func resolveHyphenRange(requested string, versionList []string) string {
+	parts := strings.Split(requested, " - ")
+	if len(parts) != 2 {
+		return ""
+	}
+	lower := strings.TrimSpace(parts[0])
+	upper := normaliseUpperLimit(strings.TrimSpace(parts[1]))
+	for i := len(versionList) - 1; i >= 0; i-- {
+		v := versionList[i]
+		if !semverLess(v, lower) && semverLess(v, upper) {
+			return v
+		}
+	}
+	return ""
+}
+
+func resolveAndComparators(requested string, versionList []string) string {
+	parts := strings.Fields(requested)
+	if len(parts) <= 1 {
+		return ""
+	}
+	versionSet := toVersionSet(versionList)
+	for _, part := range parts {
+		subset := toVersionSet(applyComparator(part, versionList))
+		versionSet = intersect(versionSet, subset)
+	}
+	var finalList []string
+	for v := range versionSet {
+		finalList = append(finalList, v)
+	}
+	sort.Slice(finalList, func(i, j int) bool {
+		return semverLess(finalList[i], finalList[j])
+	})
+	if len(finalList) > 0 {
+		return finalList[len(finalList)-1]
+	}
+	return ""
+}
+
+func resolveCaret(requested string, versionList []string) string {
+	baseParts := parseSemverParts(strings.TrimPrefix(requested, "^"))
+	lower := fmt.Sprintf("%d.%d.%d", baseParts[0], baseParts[1], baseParts[2])
+	var upper string
+	if baseParts[0] > 0 {
+		upper = fmt.Sprintf("%d.0.0-0", baseParts[0]+1)
+	} else if baseParts[1] > 0 {
+		upper = fmt.Sprintf("0.%d.0-0", baseParts[1]+1)
+	} else {
+		upper = fmt.Sprintf("0.0.%d-0", baseParts[2]+1)
+	}
+	for i := len(versionList) - 1; i >= 0; i-- {
+		v := versionList[i]
+		if !semverLess(v, lower) && semverLess(v, upper) {
+			return v
+		}
+	}
+	return ""
+}
+
+func resolveTilde(requested string, versionList []string) string {
+	clean := strings.TrimPrefix(requested, "~")
+	parts := strings.Split(clean, ".")
+
+	var lower, upper string
+	switch len(parts) {
+	case 1:
+		major, _ := strconv.Atoi(parts[0])
+		lower = fmt.Sprintf("%d.0.0", major)
+		upper = fmt.Sprintf("%d.0.0-0", major+1)
+	case 2:
+		major, _ := strconv.Atoi(parts[0])
+		minor, _ := strconv.Atoi(parts[1])
+		lower = fmt.Sprintf("%d.%d.0", major, minor)
+		upper = fmt.Sprintf("%d.%d.0-0", major, minor+1)
+	default:
+		major, _ := strconv.Atoi(parts[0])
+		minor, _ := strconv.Atoi(parts[1])
+		lower = fmt.Sprintf("%d.%d.%s", major, minor, parts[2])
+		upper = fmt.Sprintf("%d.%d.0-0", major, minor+1)
+	}
+
+	for i := len(versionList) - 1; i >= 0; i-- {
+		v := versionList[i]
+		if !semverLess(v, lower) && semverLess(v, upper) {
+			return v
+		}
+	}
+	return ""
+}
+
+func resolveWildcard(requested string, versionList []string) string {
+	prefix := strings.TrimSuffix(strings.TrimSuffix(requested, ".x"), ".*")
+	prefix = strings.TrimSuffix(prefix, "x")
+	prefix = strings.TrimSuffix(prefix, "X")
+	if !strings.HasSuffix(prefix, ".") {
+		prefix += "."
+	}
+	for i := len(versionList) - 1; i >= 0; i-- {
+		if strings.HasPrefix(versionList[i], prefix) {
+			return versionList[i]
+		}
+	}
+	if requested == "x" || requested == "X" || requested == "*" {
+		return versionList[len(versionList)-1]
+	}
+	return ""
+}
+
+func resolveExactOrComparator(requested string, versionList []string) string {
+	filtered := applyComparator(requested, versionList)
+	if len(filtered) > 0 {
+		sort.Slice(filtered, func(i, j int) bool {
+			return semverLess(filtered[i], filtered[j])
+		})
+		return filtered[len(filtered)-1]
+	}
+	for _, v := range versionList {
+		if v == requested {
+			return v
+		}
+	}
+	return ""
+}
+
+func ResolveVersion(requested string, versions map[string]interface{}) string {
+	requested = strings.TrimSpace(requested)
+
+	var versionList []string
+	for v := range versions {
+		if IsPrerelease(v) {
+			continue
+		}
+		versionList = append(versionList, v)
+	}
+	sort.Slice(versionList, func(i, j int) bool {
+		return semverLess(versionList[i], versionList[j])
+	})
+
+	var resolved string
+	switch {
+	case strings.Contains(requested, "||"):
+		resolved = resolveLogicalOr(requested, versions)
+	case strings.Contains(requested, " - "):
+		resolved = resolveHyphenRange(requested, versionList)
+	case strings.Contains(requested, " ") && len(strings.Fields(requested)) > 1:
+		resolved = resolveAndComparators(requested, versionList)
+	case strings.HasPrefix(requested, "^"):
+		resolved = resolveCaret(requested, versionList)
+	case strings.HasPrefix(requested, "~"):
+		resolved = resolveTilde(requested, versionList)
+	case isWildcard(requested):
+		resolved = resolveWildcard(requested, versionList)
+	default:
+		resolved = resolveExactOrComparator(requested, versionList)
+	}
+
+	if IsPrerelease(resolved) {
+		fmt.Printf("[INFO] Resolved version %s is a prerelease — skipping, using latest instead\n", resolved)
+		return ""
+	}
+
+	if resolved == "" {
+		return ""
+	}
+
+	return resolved
+}
