@@ -21,13 +21,13 @@ func parseGoDependencyLine(line string, token string) {
 	repo := strings.TrimPrefix(parts[0], "github.com/")
 	version := parts[1]
 
-	fmt.Printf("\nManifest: go.mod\n")
-	fmt.Printf("Package: %s %s\n", repo, version)
+	fmt.Printf("Manifest: go.mod\n")
+	fmt.Printf("Package: %s Version: %s\n", repo, version)
 	fmt.Printf("Repository URL: %s\n", repo)
 
 	sha, err := helpers.GetSHAFromTag(repo, version, token)
 	if err != nil {
-		fmt.Printf("%v\n", err)
+		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", repo, version, err)
 		return
 	}
 

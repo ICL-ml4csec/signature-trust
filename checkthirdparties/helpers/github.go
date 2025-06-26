@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/hannajonsd/git-signature-test/client"
@@ -18,10 +17,12 @@ type GitHubTag struct {
 }
 
 func GetSHAFromTag(repoURL string, version string, token string) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoURL)
+	repo := CleanGitHubURL(repoURL)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repo)
 	resp, err := client.DoGet(url, token)
+
 	if resp.StatusCode != 200 {
-		fmt.Printf("GitHub API returned HTTP %d for repo %s\n", resp.StatusCode, repoURL)
+		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
 	}
 	if err != nil {
 		return "", fmt.Errorf("error fetching tags: %v", err)
@@ -53,15 +54,30 @@ func GetSHAFromTag(repoURL string, version string, token string) (string, error)
 	return "", fmt.Errorf("no matching tag found for version %s", version)
 }
 
-func FileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	return err == nil && !info.IsDir()
-}
-
 func CleanGitHubURL(url string) string {
+	url = strings.TrimPrefix(url, "git+")
+	url = strings.TrimPrefix(url, "git://")
+	url = strings.Replace(url, "git@github.com:", "", 1)
 	url = strings.TrimPrefix(url, "https://")
-	url = strings.TrimPrefix(url, "github.com/")
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "ssh://git@")
+	url = strings.Replace(url, "github.com/", "", 1)
 	url = strings.TrimSuffix(url, ".git")
 	url = strings.TrimSuffix(url, "/")
+	if idx := strings.Index(url, "#"); idx != -1 {
+		url = url[:idx]
+	}
 	return url
+}
+
+func ExpandGitHubShorthand(input string) string {
+	clean := strings.TrimPrefix(input, "github:")
+	return "git+https://github.com/" + clean + ".git"
+}
+
+func ExtractGitTag(url string) string {
+	if idx := strings.Index(url, "#"); idx != -1 {
+		return url[idx+1:]
+	}
+	return ""
 }

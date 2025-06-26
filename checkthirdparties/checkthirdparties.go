@@ -18,6 +18,11 @@ func CheckThirdParties(token string) {
 			fmt.Printf("%v\n", err)
 		}
 	}
+	if helpers.FileExists("package.json") {
+		if err := parsers.ParsePackageJSON("package.json", token); err != nil {
+			fmt.Printf("%v\n", err)
+		}
+	}
 
 	// Future manifest files here:
 	// if fileExists("package.json") {...}
