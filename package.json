@@ -32,7 +32,11 @@
     "serve-static": "~1",                     
     "etag": "^1.0.2",                         
     "range-parser": "^1.0",
-    "dotenv": "1.a.0"                       
+    "dotenv": "1.a.0",
+    "left-pad": "latest",  
+    "react": "git+https://github.com/facebook/react.git#v18.2.0",  
+    "next-safe": "github:facebook/react#v19.0.0",
+    "scoped-alias-test": "npm:@babel/core@^7.20.0"     
   },
   "devDependencies": {
     "nodemon": "^3.0.1",                      

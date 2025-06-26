@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/hannajonsd/git-signature-test/checksignature"
 	"github.com/hannajonsd/git-signature-test/checkthirdparties/helpers"
@@ -21,9 +22,7 @@ type NpmPackageResponse struct {
 		URL string `json:"url"`
 	} `json:"repository"`
 	Versions map[string]interface{} `json:"versions"`
-	DistTags struct {
-		Latest string `json:"latest"`
-	} `json:"dist-tags"`
+	DistTags map[string]string      `json:"dist-tags"`
 }
 
 func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
@@ -32,6 +31,14 @@ func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
 		return ""
 	}
 	return repoURL
+}
+
+func printResults(depType, pkg, version, repo, sha, token string) {
+	fmt.Printf("Manifest: package.json (%s)\n", depType)
+	fmt.Printf("Package: %s Version: %s\n", pkg, version)
+	fmt.Printf("Repository URL: %s\n", repo)
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", repo, sha)
+	checksignature.CheckSignature(commitsURL, token)
 }
 
 func ParsePackageJSON(file string, token string) error {
@@ -46,77 +53,116 @@ func ParsePackageJSON(file string, token string) error {
 	}
 
 	processDeps := func(depType string, deps map[string]string) {
-		for pkg, version := range deps {
-			url := fmt.Sprintf("https://registry.npmjs.org/%s", pkg)
-			resp, err := client.DoGet(url, token)
-			if err != nil {
-				fmt.Printf("[%s] Error fetching NPM metadata for %s: %v\n", depType, pkg, err)
-				continue
-			}
-			defer resp.Body.Close()
-
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				fmt.Printf("[%s] Error reading response body for %s: %v\n", depType, pkg, err)
-				continue
+		for pkg, ver := range deps {
+			if helpers.IsTarballURL(ver) || helpers.IsLocalPath(ver) {
+				fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, ver)
 			}
 
-			var npmResp NpmPackageResponse
-			if err := json.Unmarshal(body, &npmResp); err != nil {
-				fmt.Printf("[%s] Error parsing NPM JSON for %s: %v\n", depType, pkg, err)
-				continue
-			}
+			normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, ver)
+			resolved := cleanVersion
 
-			resolved := helpers.ResolveVersion(version, npmResp.Versions)
-			if resolved == "" {
-				switch {
-				case version == "":
-					fmt.Printf("[WARN] No version specified for %q — using latest stable version\n", pkg)
-				case version == "*" || version == "latest" || version == "X" || version == "x":
-					fmt.Printf("[INFO] %q uses wildcard: %q — resolving to latest stable version\n", pkg, "*")
-				case helpers.IsValidSemver(version) && helpers.IsPrerelease(version):
-					fmt.Printf("[INFO] Requested version %q for %q is a prerelease — using latest stable version\n", version, pkg)
-				default:
-					fmt.Printf("[WARN] Could not resolve version %q for %q — falling back to latest\n", version, pkg)
-				}
-
-				resolved = npmResp.DistTags.Latest
-				if resolved == "" {
-					fmt.Printf("[ERROR] No version could be resolved for %q\n", pkg)
+			switch kind {
+			case "git":
+				fmt.Printf("[INFO] Git dependency for %q: %q\n", normalisedName, cleanVersion)
+				tag := helpers.ExtractGitTag(cleanVersion)
+				if tag == "" {
+					fmt.Printf("[WARN] No tag found in Git URL for %q\n", normalisedName)
 					continue
 				}
-			}
+				baseURL := strings.Split(cleanVersion, "#")[0]
+				repo := helpers.CleanGitHubURL(baseURL)
 
-			repoURL := extractRepoURLFromNpm(npmResp)
-
-			normalizedRepo := helpers.CleanGitHubURL(repoURL)
-			if normalizedRepo == "" {
-				fmt.Printf("[%s] No repository URL found for %s\n", depType, pkg)
-				continue
-			}
-
-			versionsToTry := []string{resolved, "v" + resolved}
-			var sha string
-			var shaErr error
-			for _, v := range versionsToTry {
-				sha, shaErr = helpers.GetSHAFromTag(normalizedRepo, v, token)
-				if shaErr == nil {
-					resolved = v
-					break
+				sha, err := helpers.GetSHAFromTag(repo, tag, token)
+				if err != nil {
+					fmt.Printf("[WARN] Failed to resolve SHA for tag %q in %q: %v\n", tag, repo, err)
+					continue
 				}
-			}
 
-			if shaErr != nil {
-				fmt.Printf("[%s] Error getting SHA for %s@%s: %v\n", depType, pkg, resolved, shaErr)
+				printResults(depType, pkg, tag, repo, sha, token)
 				continue
+
+			case "github-shorthand":
+				fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
+				gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
+				repo := helpers.CleanGitHubURL(gitURL)
+				tag := helpers.ExtractGitTag(cleanVersion)
+				if tag == "" {
+					tag = "latest"
+				}
+				sha, err := helpers.GetSHAFromTag(repo, tag, token)
+				if err != nil {
+					fmt.Printf("[WARN] Failed to resolve SHA for %q@%q: %v\n", repo, tag, err)
+					continue
+				}
+
+				printResults(depType, normalisedName, tag, repo, sha, token)
+				continue
+
+			default:
+				url := fmt.Sprintf("https://registry.npmjs.org/%s", normalisedName)
+				resp, err := client.DoGet(url, token)
+				if err != nil {
+					fmt.Printf("[%s] Fetch failed for %s: %v\n", depType, normalisedName, err)
+					continue
+				}
+				body, _ := io.ReadAll(resp.Body)
+				defer resp.Body.Close()
+
+				var npmResp NpmPackageResponse
+				if err := json.Unmarshal(body, &npmResp); err != nil {
+					fmt.Printf("[%s] Error parsing NPM JSON for %s: %v\n", depType, normalisedName, err)
+					continue
+				}
+
+				if kind == "tag" {
+					if tagVer, ok := npmResp.DistTags[cleanVersion]; ok {
+						resolved = tagVer
+					} else if latest, ok := npmResp.DistTags["latest"]; ok {
+						fmt.Printf("[WARN] Tag %q missing — using latest\n", cleanVersion)
+						resolved = latest
+					} else {
+						fmt.Printf("[ERROR] No version resolved for %q\n", normalisedName)
+						continue
+					}
+				}
+
+				if kind == "scoped-alias" {
+					fmt.Printf("[INFO] Scoped alias %q resolved to %q @ %q\n", ver, normalisedName, cleanVersion)
+					resolved = cleanVersion
+					pkg = normalisedName
+				}
+
+				resolved = helpers.ResolveVersion(resolved, npmResp.Versions)
+				if resolved == "" {
+					if latest, ok := npmResp.DistTags["latest"]; ok {
+						fmt.Printf("[WARN] Fallback to latest for %q\n", pkg)
+						resolved = latest
+					} else {
+						fmt.Printf("[ERROR] No version resolved for %q\n", pkg)
+						continue
+					}
+				}
+
+				repoURL := extractRepoURLFromNpm(npmResp)
+
+				normalisedRepo := helpers.CleanGitHubURL(repoURL)
+				if normalisedRepo == "" {
+					fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, ver)
+					continue
+				}
+
+				sha, shaErr := helpers.GetSHAFromTag(normalisedRepo, resolved, token)
+				if shaErr != nil && !strings.HasPrefix(resolved, "v") {
+					sha, shaErr = helpers.GetSHAFromTag(normalisedRepo, "v"+resolved, token)
+					resolved = "v" + resolved
+				}
+				if shaErr != nil {
+					fmt.Printf("[%s] Error getting SHA for %s@%s: %v\n", depType, pkg, resolved, shaErr)
+					continue
+				}
+
+				printResults(depType, pkg, resolved, normalisedRepo, sha, token)
 			}
-
-			fmt.Printf("Manifest: package.json (%s)\n", depType)
-			fmt.Printf("Package: %s Version: %s\n", pkg, resolved)
-			fmt.Printf("Repository URL: %s\n", normalizedRepo)
-
-			commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", normalizedRepo, sha)
-			checksignature.CheckSignature(commitsURL, token)
 		}
 	}
 
