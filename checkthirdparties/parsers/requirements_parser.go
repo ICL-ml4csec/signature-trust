@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/hannajonsd/git-signature-test/checksignature"
 	"github.com/hannajonsd/git-signature-test/checkthirdparties/helpers"
+	"github.com/hannajonsd/git-signature-test/client"
 )
 
 type pypiResponse struct {
@@ -71,7 +71,7 @@ func ParseRequirements(file string, token string) error {
 
 		pypiURL := fmt.Sprintf("https://pypi.org/pypi/%s/json", packageName)
 
-		resp, err := http.Get(pypiURL)
+		resp, err := client.DoGet(pypiURL, token)
 		if err != nil {
 			fmt.Printf("Error fetching PyPI data: %v\n", err)
 			continue
