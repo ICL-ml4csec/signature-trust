@@ -53,12 +53,12 @@ func ParsePackageJSON(file string, token string) error {
 	}
 
 	processDeps := func(depType string, deps map[string]string) {
-		for pkg, ver := range deps {
-			if helpers.IsTarballURL(ver) || helpers.IsLocalPath(ver) {
-				fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, ver)
+		for pkg, version := range deps {
+			if helpers.IsTarballURL(version) || helpers.IsLocalPath(version) {
+				fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, version)
 			}
 
-			normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, ver)
+			normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, version)
 			resolved := cleanVersion
 
 			switch kind {
@@ -127,15 +127,25 @@ func ParsePackageJSON(file string, token string) error {
 				}
 
 				if kind == "scoped-alias" {
-					fmt.Printf("[INFO] Scoped alias %q resolved to %q @ %q\n", ver, normalisedName, cleanVersion)
+					fmt.Printf("[INFO] Scoped alias %q resolved to %q @ %q\n", version, normalisedName, cleanVersion)
 					resolved = cleanVersion
 					pkg = normalisedName
 				}
 
 				resolved = helpers.ResolveVersion(resolved, npmResp.Versions)
 				if resolved == "" {
+					switch {
+					case version == "":
+						fmt.Printf("[WARN] No version specified for %q — using latest stable version\n", pkg)
+					case version == "*" || version == "latest" || version == "X" || version == "x":
+						fmt.Printf("[INFO] %q uses wildcard: %q — resolving to latest stable version\n", pkg, version)
+					case helpers.IsValidSemver(version) && helpers.IsPrerelease(version):
+						fmt.Printf("[INFO] Requested version %q for %q is a prerelease — using latest stable version\n", version, pkg)
+					default:
+						fmt.Printf("[WARN] Could not resolve version %q for %q — falling back to latest\n", version, pkg)
+					}
+
 					if latest, ok := npmResp.DistTags["latest"]; ok {
-						fmt.Printf("[WARN] Fallback to latest for %q\n", pkg)
 						resolved = latest
 					} else {
 						fmt.Printf("[ERROR] No version resolved for %q\n", pkg)
@@ -147,7 +157,7 @@ func ParsePackageJSON(file string, token string) error {
 
 				normalisedRepo := helpers.CleanGitHubURL(repoURL)
 				if normalisedRepo == "" {
-					fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, ver)
+					fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, version)
 					continue
 				}
 
