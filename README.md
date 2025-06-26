@@ -129,15 +129,15 @@ Verified commits: 96.67%
 * **`requirements.txt`** - For each Python package:
   * Parses the package name and version (or falls back to the latest).
   * Retrieves metadata from the PyPI registry.
-  * Extracts and normalizes the GitHub repository URL.
+  * Extracts and normalises the GitHub repository URL.
   * Resolves the tag to the corresponding Git commit SHA.
   * Retrieves the last 30 commits on that commit’s branch.
   * Calculates the percentage of commits signed with GPG or SSH.
 
 * **`package.json`** - For each npm package in dependencies and devDependencies:
-  * Parses the package name and version (including support for ranges like ^1.2.3, ~1.2.0, 1.2.x, etc.).
+  * Handles all common formats: exact versions, semver ranges (`^`, `~`, `*`, `x`, `-`), GitHub shorthands, Git URLs, scoped aliases (`npm:@scope/pkg@version`), and tags like `latest`.
   * Retrieves metadata from the npm registry.
-  * Extracts and normalizes the GitHub repository URL.
+  * Extracts and normalises the GitHub repository URL.
   * Resolves the tag to the corresponding Git commit SHA.
   * Retrieves the last 30 commits on that commit’s branch.
   * Calculates the percentage of commits signed with GPG or SSH.
