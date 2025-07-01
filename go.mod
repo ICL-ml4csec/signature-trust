@@ -13,6 +13,7 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/spf13/cobra/v2 v2.9.1
 	github.com/spf13/cobra v1.9.0
+	github.com/foo/bar v1.5.1
 )
 
 exclude github.com/stretchr/testify v1.10.0 // excluded, do not use that version
