@@ -12,6 +12,13 @@ import (
 
 var excludeMap = make(map[string]string)
 
+type Replacement struct {
+	Repo    string
+	Version string
+}
+
+var replaceMap = make(map[string]Replacement)
+
 func parseGoDependencyLine(line string, token string) {
 	if idx := strings.Index(line, "//"); idx != -1 {
 		line = line[:idx]
@@ -28,46 +35,52 @@ func parseGoDependencyLine(line string, token string) {
 		return
 	}
 
-	repo := helpers.CleanGitHubURL(parts[0])
+	rawRepo := parts[0]
+	cleanedRepo := helpers.CleanGitHubURL(rawRepo)
 	version := parts[1]
 	version = strings.Split(version, "+")[0]
 
-	if excludedVersion, ok := excludeMap[repo]; ok && excludedVersion == strings.TrimPrefix(version, "v") {
-		fmt.Printf("Excluded: %s@%s (skipped)\n\n", repo, version)
+	if replacement, ok := replaceMap[rawRepo]; ok {
+		fmt.Printf("[INFO] Replaced module: %s → %s@%s\n", rawRepo, replacement.Repo, replacement.Version)
+		cleanedRepo = helpers.CleanGitHubURL(replacement.Repo)
+		version = replacement.Version
+	}
+
+	if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(version, "v") {
+		fmt.Printf("Excluded: %s@%s (skipped)\n\n", cleanedRepo, version)
 		return
 	}
 
 	fmt.Printf("Manifest: go.mod\n")
-	fmt.Printf("Package: %s Version: %s\n", repo, version)
-	fmt.Printf("Repository URL: %s\n", repo)
+	fmt.Printf("Package: %s Version: %s\n", cleanedRepo, version)
+	fmt.Printf("Repository URL: %s\n", cleanedRepo)
 
 	if strings.Contains(version, "-") && strings.HasPrefix(version, "v0.0.0-") {
 		fmt.Printf("Pseudo-version detected, falling back to latest semver tag.\n")
-		tag, sha, err := helpers.FindLatestSemverTag(repo, token)
+		tag, sha, err := helpers.FindLatestSemverTag(cleanedRepo, token)
 		if err != nil {
-			fmt.Printf("Error finding latest tag for %s: %v\n\n", repo, err)
+			fmt.Printf("Error finding latest tag for %s: %v\n\n", cleanedRepo, err)
 			return
 		}
-
 		fmt.Printf("Resolved to tag: %s\n", tag)
 
-		if excludedVersion, ok := excludeMap[repo]; ok && excludedVersion == strings.TrimPrefix(tag, "v") {
-			fmt.Printf("Excluded after resolving: %s@%s (skipped)\n\n", repo, tag)
+		if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(tag, "v") {
+			fmt.Printf("Excluded after resolving: %s@%s (skipped)\n\n", cleanedRepo, tag)
 			return
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", repo, sha)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
 		checksignature.CheckSignature(commitsURL, token)
 		return
 	}
 
-	sha, err := helpers.GetSHAFromTag(repo, version, token)
+	sha, err := helpers.GetSHAFromTag(cleanedRepo, version, token)
 	if err != nil {
-		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", repo, version, err)
+		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", cleanedRepo, version, err)
 		return
 	}
 
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", repo, sha)
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
 	checksignature.CheckSignature(commitsURL, token)
 }
 
@@ -90,7 +103,26 @@ func ParseGo(file string, token string) error {
 				version := strings.Split(parts[1], "+")[0]
 				version = strings.TrimPrefix(version, "v")
 				excludeMap[cleanedRepoPath] = version
-				fmt.Printf("Added to excludeMap: %s -> %s\n", cleanedRepoPath, version)
+				fmt.Printf("Added to excludeMap: %s -> %s\n\n", cleanedRepoPath, version)
+			}
+		} else if strings.HasPrefix(line, "replace ") {
+			line = strings.TrimPrefix(line, "replace ")
+			line = strings.Split(line, "//")[0]
+			parts := strings.Fields(line)
+			if len(parts) == 4 && parts[1] == "=>" {
+				original := parts[0]
+				replacement := parts[2]
+				version := parts[3]
+
+				if strings.HasPrefix(replacement, "../") || strings.HasPrefix(replacement, "./") {
+					fmt.Printf("[SKIP] Replacement points to a local file path, not a GitHub repository: %s => %s (ignored)\n", original, replacement)
+					continue
+				}
+
+				repo := helpers.CleanGitHubURL(replacement)
+				version = strings.Split(version, "+")[0]
+
+				replaceMap[original] = Replacement{Repo: repo, Version: version}
 			}
 		}
 	}
