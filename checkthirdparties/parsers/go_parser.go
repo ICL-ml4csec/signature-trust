@@ -10,28 +10,77 @@ import (
 	"github.com/hannajonsd/git-signature-test/checkthirdparties/helpers"
 )
 
+var excludeMap = make(map[string]string)
+
+type Replacement struct {
+	Repo    string
+	Version string
+}
+
+var replaceMap = make(map[string]Replacement)
+
 func parseGoDependencyLine(line string, token string) {
+	if idx := strings.Index(line, "//"); idx != -1 {
+		line = line[:idx]
+	}
+	line = strings.TrimSpace(line)
+
 	if !strings.HasPrefix(line, "github.com/") {
+		fmt.Printf("Skipping non-github dependency (not implemented yet): %s\n\n", line)
 		return
 	}
+
 	parts := strings.Fields(line)
 	if len(parts) != 2 {
 		return
 	}
-	repo := strings.TrimPrefix(parts[0], "github.com/")
+
+	rawRepo := parts[0]
+	cleanedRepo := helpers.CleanGitHubURL(rawRepo)
 	version := parts[1]
+	version = strings.Split(version, "+")[0]
 
-	fmt.Printf("Manifest: go.mod\n")
-	fmt.Printf("Package: %s Version: %s\n", repo, version)
-	fmt.Printf("Repository URL: %s\n", repo)
+	if replacement, ok := replaceMap[rawRepo]; ok {
+		fmt.Printf("[INFO] Replaced module: %s → %s@%s\n", rawRepo, replacement.Repo, replacement.Version)
+		cleanedRepo = helpers.CleanGitHubURL(replacement.Repo)
+		version = replacement.Version
+	}
 
-	sha, err := helpers.GetSHAFromTag(repo, version, token)
-	if err != nil {
-		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", repo, version, err)
+	if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(version, "v") {
+		fmt.Printf("Excluded: %s@%s (skipped)\n\n", cleanedRepo, version)
 		return
 	}
 
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", repo, sha)
+	fmt.Printf("Manifest: go.mod\n")
+	fmt.Printf("Package: %s Version: %s\n", cleanedRepo, version)
+	fmt.Printf("Repository URL: %s\n", cleanedRepo)
+
+	if strings.Contains(version, "-") && strings.HasPrefix(version, "v0.0.0-") {
+		fmt.Printf("Pseudo-version detected, falling back to latest semver tag.\n")
+		tag, sha, err := helpers.FindLatestSemverTag(cleanedRepo, token)
+		if err != nil {
+			fmt.Printf("Error finding latest tag for %s: %v\n\n", cleanedRepo, err)
+			return
+		}
+		fmt.Printf("Resolved to tag: %s\n", tag)
+
+		if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(tag, "v") {
+			fmt.Printf("Excluded after resolving: %s@%s (skipped)\n\n", cleanedRepo, tag)
+			return
+		}
+
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
+		checksignature.CheckSignature(commitsURL, token)
+		return
+	}
+
+	sha, err := helpers.GetSHAFromTag(cleanedRepo, version, token)
+	if err != nil {
+		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", cleanedRepo, version, err)
+		return
+	}
+
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
 	checksignature.CheckSignature(commitsURL, token)
 }
 
@@ -43,10 +92,55 @@ func ParseGo(file string, token string) error {
 	defer data.Close()
 
 	scanner := bufio.NewScanner(data)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "exclude ") {
+			line = strings.TrimPrefix(line, "exclude ")
+			line = strings.Split(line, "//")[0]
+			parts := strings.Fields(line)
+			if len(parts) == 2 {
+				cleanedRepoPath := helpers.CleanGitHubURL(parts[0])
+				version := strings.Split(parts[1], "+")[0]
+				version = strings.TrimPrefix(version, "v")
+				excludeMap[cleanedRepoPath] = version
+				fmt.Printf("Added to excludeMap: %s -> %s\n\n", cleanedRepoPath, version)
+			}
+		} else if strings.HasPrefix(line, "replace ") {
+			line = strings.TrimPrefix(line, "replace ")
+			line = strings.Split(line, "//")[0]
+			parts := strings.Fields(line)
+			if len(parts) == 4 && parts[1] == "=>" {
+				original := parts[0]
+				replacement := parts[2]
+				version := parts[3]
+
+				if strings.HasPrefix(replacement, "../") || strings.HasPrefix(replacement, "./") {
+					fmt.Printf("[SKIP] Replacement points to a local file path, not a GitHub repository: %s => %s (ignored)\n", original, replacement)
+					continue
+				}
+
+				repo := helpers.CleanGitHubURL(replacement)
+				version = strings.Split(version, "+")[0]
+
+				replaceMap[original] = Replacement{Repo: repo, Version: version}
+			}
+		}
+	}
+
+	_, err = data.Seek(0, 0)
+	if err != nil {
+		return fmt.Errorf("error rewinding go.mod: %v", err)
+	}
+	scanner = bufio.NewScanner(data)
 	inRequireBlock := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+
+		if strings.Contains(line, "indirect") {
+			fmt.Printf("This tool checks only explicitly declared dependencies. Skipping indirect dependency: %s \n\n", line)
+			continue
+		}
 		if strings.HasPrefix(line, "require (") {
 			inRequireBlock = true
 			continue
