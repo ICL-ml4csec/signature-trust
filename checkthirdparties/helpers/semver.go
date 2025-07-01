@@ -1,11 +1,15 @@
 package helpers
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/hannajonsd/git-signature-test/client"
 )
 
 func IsValidSemver(version string) bool {
@@ -25,6 +29,8 @@ func parseSemverParts(version string) [3]int {
 	if idx := strings.Index(version, "-"); idx != -1 {
 		version = version[:idx]
 	}
+	version = strings.TrimPrefix(version, "v")
+
 	parts := strings.Split(version, ".")
 	var res [3]int
 	for i := 0; i < len(parts) && i < 3; i++ {
@@ -271,6 +277,53 @@ func resolveExactOrComparator(requested string, versionList []string) string {
 		}
 	}
 	return ""
+}
+
+func FindLatestSemverTag(repo string, token string) (string, string, error) {
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", CleanGitHubURL(repo))
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return "", "", fmt.Errorf("error fetching tags: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("error reading tags response: %v", err)
+	}
+
+	var tags []GitHubTag
+	err = json.Unmarshal(body, &tags)
+	if err != nil {
+		return "", "", fmt.Errorf("error parsing tags JSON: %v", err)
+	}
+
+	var semverTags []string
+	tagToSHA := make(map[string]string)
+
+	for _, tag := range tags {
+		tagName := strings.TrimPrefix(tag.Name, "v")
+		if IsValidSemver(tagName) {
+			semverTags = append(semverTags, tag.Name)
+			tagToSHA[tag.Name] = tag.Commit.SHA
+		}
+	}
+
+	if len(semverTags) == 0 {
+		return "", "", fmt.Errorf("no valid semver tags found for %s", repo)
+	}
+
+	sort.Slice(semverTags, func(i, j int) bool {
+		return semverLess(semverTags[i], semverTags[j])
+	})
+
+	latestTag := semverTags[len(semverTags)-1]
+	return latestTag, tagToSHA[latestTag], nil
 }
 
 func ResolveVersion(requested string, versions map[string]interface{}) string {
