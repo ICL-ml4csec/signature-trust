@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/hannajonsd/git-signature-test/client"
@@ -67,6 +68,10 @@ func CleanGitHubURL(url string) string {
 	if idx := strings.Index(url, "#"); idx != -1 {
 		url = url[:idx]
 	}
+
+	var majorVersionSuffix = regexp.MustCompile(`/v[0-9]+$`)
+	url = majorVersionSuffix.ReplaceAllString(url, "")
+
 	return url
 }
 
