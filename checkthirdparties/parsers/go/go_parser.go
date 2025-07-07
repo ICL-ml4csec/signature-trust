@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hannajonsd/git-signature-test/checksignature"
-	"github.com/hannajonsd/git-signature-test/checkthirdparties/helpers"
+	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/helpers"
 )
 
 var excludeMap = make(map[string]string)

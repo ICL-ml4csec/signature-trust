@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hannajonsd/git-signature-test/client"
+	"github.com/ICL-ml4sec/msc-hmj24/client"
 )
 
 func IsValidSemver(version string) bool {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hannajonsd/git-signature-test/client"
+	"github.com/ICL-ml4sec/msc-hmj24/client"
 )
 
 type GitCommitResponse struct {
