@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hannajonsd/git-signature-test/checksignature"
-	"github.com/hannajonsd/git-signature-test/checkthirdparties"
+	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties"
 )
 
 func main() {

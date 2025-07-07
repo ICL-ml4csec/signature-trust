@@ -1,4 +1,4 @@
-module github.com/hannajonsd/git-signature-test
+module github.com/ICL-ml4sec/msc-hmj24
 
 go 1.23
 
