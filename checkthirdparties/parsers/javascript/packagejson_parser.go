@@ -37,7 +37,7 @@ func printResults(depType, pkg, version, repo, sha, token string) {
 	fmt.Printf("Manifest: package.json (%s)\n", depType)
 	fmt.Printf("Package: %s Version: %s\n", pkg, version)
 	fmt.Printf("Repository URL: %s\n", repo)
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", repo, sha)
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", repo, sha)
 	checksignature.CheckSignature(commitsURL, token)
 }
 
@@ -172,6 +172,14 @@ func ParsePackageJSON(file string, token string) error {
 				}
 
 				printResults(depType, pkg, resolved, normalisedRepo, sha, token)
+
+				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
+				// if err != nil {
+				// 	fmt.Println("Error checking signatures locally:", err)
+				// 	continue
+				// }
+				// helpers.PrintSignatureResults(results, "Local")
+
 			}
 		}
 	}

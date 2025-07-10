@@ -55,6 +55,34 @@ func GetSHAFromTag(repoURL string, version string, token string) (string, error)
 	return "", fmt.Errorf("no matching tag found for version %s", version)
 }
 
+func GetSHAFromBranch(repo string, branch string, token string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, branch)
+	resp, err := client.DoGet(url, token)
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+	}
+	if err != nil {
+		return "", fmt.Errorf("error fetching branch SHA: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading branch response: %v", err)
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return "", fmt.Errorf("error parsing branch JSON: %v", err)
+	}
+
+	return result.SHA, nil
+}
+
 func CleanGitHubURL(url string) string {
 	url = strings.TrimPrefix(url, "git+")
 	url = strings.TrimPrefix(url, "git://")
