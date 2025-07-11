@@ -2,6 +2,7 @@ package checksignature
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -19,6 +20,7 @@ const (
 	ValidSignatureButNotCertified SignatureStatus = "valid-but-not-certified"
 	UnsignedCommit                SignatureStatus = "unsigned"
 	VerificationError             SignatureStatus = "error"
+	EmailNotMatched               SignatureStatus = "signed-but-untrusted-email"
 )
 
 type SignatureCheckResult struct {
@@ -62,17 +64,87 @@ func importGPGKeyFromGitHub(username string, token string) error {
 	return nil
 }
 
+func importSSHKeysFromGitHub(username string, token string) (string, error) {
+	url := fmt.Sprintf("https://github.com/%s.keys", username)
+	resp, err := client.DoGet(url, token)
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub SSH keys not found for user %s (status: %d)", username, resp.StatusCode)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("HTTP error fetching GitHub SSH keys: %v", err)
+	}
+	defer resp.Body.Close()
+
+	keys, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read SSH key response: %v", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "allowed_signers_*.txt")
+	if err != nil {
+		return "", fmt.Errorf("failed to create allowed_signers file: %v", err)
+	}
+	defer tmpFile.Close()
+
+	lines := strings.Split(string(keys), "\n")
+	for _, key := range lines {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		line := fmt.Sprintf("%s %s\n", username, key)
+		if _, err := tmpFile.WriteString(line); err != nil {
+			return "", fmt.Errorf("failed to write to allowed_signers file: %v", err)
+		}
+	}
+
+	configCmd := exec.Command("git", "config", "--global", "gpg.ssh.allowedSignersFile", tmpFile.Name())
+	if out, err := configCmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("failed to set git config: %v\n%s", err, string(out))
+	}
+
+	fmt.Printf("Successfully imported SSH key(s) from https://github.com/%s.keys\n", username)
+	return tmpFile.Name(), nil
+}
+
+func extractEmailsFromSignatureOutput(output string) (signerEmail string, authorEmail string) {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Good signature from") {
+			start := strings.Index(line, "<")
+			end := strings.Index(line, ">")
+			if start != -1 && end != -1 && end > start {
+				signerEmail = line[start+1 : end]
+			}
+		}
+		if strings.HasPrefix(line, "Author:") {
+			start := strings.Index(line, "<")
+			end := strings.Index(line, ">")
+			if start != -1 && end != -1 && end > start {
+				authorEmail = line[start+1 : end]
+			}
+		}
+	}
+	return
+}
+
 func classifySignature(output string) SignatureStatus {
+	signerEmail, authorEmail := extractEmailsFromSignatureOutput(output)
+
 	switch {
-	case strings.Contains(output, "Good signature") &&
-		strings.Contains(output, "expired"):
+	case strings.Contains(output, "Good") && strings.Contains(output, "expired"):
 		return ExpiredButValidSignature
 
-	case strings.Contains(output, "Good signature") &&
+	case strings.Contains(output, "Good") &&
 		strings.Contains(output, "There is no indication that the signature belongs to the owner"):
 		return ValidSignatureButNotCertified
 
-	case strings.Contains(output, "Good signature"):
+	case strings.Contains(output, "Good") && (strings.Contains(output, "ED25519") || strings.Contains(output, "RSA key")):
+		if signerEmail != "" && authorEmail != "" && signerEmail != authorEmail {
+			return EmailNotMatched
+		}
 		return ValidSignature
 
 	case strings.Contains(output, "Can't check signature: No public key"):
@@ -101,7 +173,14 @@ func CheckSignatureLocal(repoPath, sha string, token string) ([]SignatureCheckRe
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, out)
 	}
 
-	cmd := exec.Command("git", "rev-list", "-n", "10", sha) // make configurable
+	allowedSignersPath, err := importSSHKeysFromGitHub(githubUsername, token)
+	if err != nil {
+		fmt.Printf("Failed to import SSH keys for %s: %v\n", githubUsername, err)
+	}
+
+	_ = importGPGKeyFromGitHub(githubUsername, token)
+
+	cmd := exec.Command("git", "rev-list", "-n", "10", sha)
 	cmd.Dir = tmpDir
 	shaListRaw, err := cmd.Output()
 	if err != nil {
@@ -113,24 +192,44 @@ func CheckSignatureLocal(repoPath, sha string, token string) ([]SignatureCheckRe
 	attemptedKeys := make(map[string]bool)
 
 	for _, s := range shas {
-		verify := exec.Command("git", "verify-commit", s)
-		verify.Dir = tmpDir
-		outputBytes, err := verify.CombinedOutput()
-		output := string(outputBytes)
+		var output string
+		var status SignatureStatus
+		var err error
 
-		status := classifySignature(output)
+		gpgCmd := exec.Command("git", "log", "-1", "--show-signature", s)
+		gpgCmd.Dir = tmpDir
+		gpgOut, gpgErr := gpgCmd.CombinedOutput()
+		gpgOutput := string(gpgOut)
+
+		status = classifySignature(gpgOutput)
+		output = gpgOutput
+		err = gpgErr
 
 		if status == MissingPublicKey {
-			keyID := extractKeyID(output)
-
+			keyID := extractKeyID(gpgOutput)
 			if keyID != "" && !attemptedKeys[keyID] {
-				fmt.Printf("Missing key %s. Attempting to fetch...\n", keyID)
-
+				fmt.Printf("Missing GPG key %s. Attempting to fetch...\n", keyID)
 				if err := importGPGKeyFromGitHub(githubUsername, token); err != nil {
 					fmt.Printf("Failed to import key %s: %v\n", keyID, err)
 				}
-
 				attemptedKeys[keyID] = true
+			}
+		}
+
+		if status == UnsignedCommit || status == MissingPublicKey {
+			sshCmd := exec.Command("git", "-c", "gpg.format=ssh",
+				"-c", fmt.Sprintf("gpg.ssh.allowedSignersFile=%s", allowedSignersPath),
+				"log", "-1", "--show-signature", s)
+			sshCmd.Dir = tmpDir
+			sshOut, sshErr := sshCmd.CombinedOutput()
+			sshOutput := string(sshOut)
+
+			sshStatus := classifySignature(sshOutput)
+
+			if sshStatus != UnsignedCommit && sshStatus != InvalidSignature {
+				status = sshStatus
+				output = sshOutput
+				err = sshErr
 			}
 		}
 

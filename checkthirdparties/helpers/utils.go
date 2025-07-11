@@ -18,16 +18,14 @@ func PrintSignatureResults(results []checksignature.SignatureCheckResult, label 
 	verified := 0
 	for _, result := range results {
 		if result.Status == string(checksignature.ValidSignature) ||
-			result.Status == string(checksignature.ExpiredButValidSignature) { // Make configurable (include/exclude)
-			verified++
-		} else if result.Status == string(checksignature.ValidSignatureButNotCertified) {
-			fmt.Printf("Flagged commit %s as valid but not certified.\n", result.CommitSHA)
+			result.Status == string(checksignature.ExpiredButValidSignature) ||
+			result.Status == string(checksignature.ValidSignatureButNotCertified) {
 			verified++
 		} else {
-			fmt.Printf("Commit %s status: %s\n\n", result.CommitSHA, result.Status)
+			fmt.Printf("Commit %s status: %s\nOutput:\n%s\n\n", result.CommitSHA, result.Status, result.Output)
 			continue
 		}
-		fmt.Printf("Commit %s status: %s\n\nOutput:\n%s\n", result.CommitSHA, result.Status, result.Output)
+		fmt.Printf("Verified commit %s status: %s\n\n", result.CommitSHA, result.Status)
 	}
 
 	percent := float64(verified) / float64(len(results)) * 100
