@@ -20,10 +20,15 @@ type Replacement struct {
 var replaceMap = make(map[string]Replacement)
 
 func parseGoDependencyLine(line string, token string) {
+	line = strings.TrimSpace(line)
+
+	if strings.HasPrefix(line, "//") || line == "" {
+		return
+	}
+
 	if idx := strings.Index(line, "//"); idx != -1 {
 		line = line[:idx]
 	}
-	line = strings.TrimSpace(line)
 
 	if !strings.HasPrefix(line, "github.com/") {
 		fmt.Printf("Skipping non-github dependency (not implemented yet): %s\n\n", line)
@@ -69,7 +74,7 @@ func parseGoDependencyLine(line string, token string) {
 			return
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", cleanedRepo, sha)
 		checksignature.CheckSignature(commitsURL, token)
 		return
 	}
@@ -80,8 +85,15 @@ func parseGoDependencyLine(line string, token string) {
 		return
 	}
 
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", cleanedRepo, sha)
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", cleanedRepo, sha)
 	checksignature.CheckSignature(commitsURL, token)
+
+	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, token)
+	if err != nil {
+		fmt.Println("Error checking signatures locally:", err)
+		return
+	}
+	helpers.PrintSignatureResults(results, "Local")
 }
 
 func ParseGo(file string, token string) error {

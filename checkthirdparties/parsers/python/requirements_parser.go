@@ -101,20 +101,28 @@ func ParseRequirements(file string, token string) error {
 			continue
 		}
 
-		normalizedRepo := helpers.CleanGitHubURL(repoURL)
+		normalisedRepo := helpers.CleanGitHubURL(repoURL)
 
 		fmt.Printf("Manifest: requirements.txt\n")
 		fmt.Printf("Package: %s Version: %s\n", packageName, version)
-		fmt.Printf("Repository URL: %s\n", normalizedRepo)
+		fmt.Printf("Repository URL: %s\n", normalisedRepo)
 
-		sha, err := helpers.GetSHAFromTag(normalizedRepo, version, token)
+		sha, err := helpers.GetSHAFromTag(normalisedRepo, version, token)
 		if err != nil {
 			fmt.Printf("Error getting SHA for %s@%s: %v\n\n", packageName, version, err)
 			continue
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=30", normalizedRepo, sha)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", normalisedRepo, sha)
 		checksignature.CheckSignature(commitsURL, token)
+
+		// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
+		// if err != nil {
+		// 	fmt.Println("Error checking signatures locally:", err)
+		// 	continue
+		// }
+		// helpers.PrintSignatureResults(results, "Local")
+
 	}
 	return nil
 }
