@@ -11,6 +11,9 @@ inputs:
   token:
     description: "GitHub token"
     required: true
+  commits-to-check:
+    description: "Number of commits to check"
+    required: true
 
 runs:
   using: "docker"
@@ -19,3 +22,4 @@ runs:
     - ${{ inputs.repository }}
     - ${{ inputs.branch }}
     - ${{ inputs.token }}
+    - ${{ inputs.commits-to-check }}

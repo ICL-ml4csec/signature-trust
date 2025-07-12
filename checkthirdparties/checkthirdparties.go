@@ -9,19 +9,19 @@ import (
 	pyparser "github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/parsers/python"
 )
 
-func CheckThirdParties(token string) {
+func CheckThirdParties(token string, commitsToCheck int) {
 	if helpers.FileExists("go.mod") {
-		if err := goparser.ParseGo("go.mod", token); err != nil {
+		if err := goparser.ParseGo("go.mod", token, commitsToCheck); err != nil {
 			fmt.Printf("%v\n", err)
 		}
 	}
 	if helpers.FileExists("requirements.txt") {
-		if err := pyparser.ParseRequirements("requirements.txt", token); err != nil {
+		if err := pyparser.ParseRequirements("requirements.txt", token, commitsToCheck); err != nil {
 			fmt.Printf("%v\n", err)
 		}
 	}
 	if helpers.FileExists("package.json") {
-		if err := jsparser.ParsePackageJSON("package.json", token); err != nil {
+		if err := jsparser.ParsePackageJSON("package.json", token, commitsToCheck); err != nil {
 			fmt.Printf("%v\n", err)
 		}
 	}

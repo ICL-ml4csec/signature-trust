@@ -27,3 +27,4 @@ jobs:
           repository: ${{ github.repository }}
           branch: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          commits-to-check: 10

@@ -49,7 +49,7 @@ func extractRepoURLFromPyPI(pypiResp pypiResponse) string {
 	return ""
 }
 
-func ParseRequirements(file string, token string) error {
+func ParseRequirements(file string, token string, commitsToCheck int) error {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("error reading requirements.txt: %v", err)
@@ -113,7 +113,7 @@ func ParseRequirements(file string, token string) error {
 			continue
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", normalisedRepo, sha)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", normalisedRepo, sha, commitsToCheck)
 		checksignature.CheckSignature(commitsURL, token)
 
 		// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
