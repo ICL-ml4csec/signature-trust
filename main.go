@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
 	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties"
@@ -18,8 +19,13 @@ func main() {
 	repo := os.Args[1]
 	branch := os.Args[2]
 	token := os.Args[3]
+	commitsToCheck, err := strconv.Atoi(os.Args[4])
+	if err != nil {
+		fmt.Printf("Invalid number for commits-to-check: %v\n", os.Args[4])
+		os.Exit(1)
+	}
 
-	url := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", repo, branch)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", repo, branch, commitsToCheck)
 	fmt.Printf("Checking commits for repository: %s on branch: %s\n", repo, branch)
 
 	checksignature.CheckSignature(url, token)
@@ -31,7 +37,11 @@ func main() {
 		return
 	}
 
-	results, err := checksignature.CheckSignatureLocal(repo, sha, token)
+	config := checksignature.LocalCheckConfig{
+		MaxCommits: commitsToCheck,
+	}
+
+	results, err := checksignature.CheckSignatureLocal(repo, sha, token, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return
@@ -39,5 +49,5 @@ func main() {
 	helpers.PrintSignatureResults(results, "Local")
 
 	fmt.Printf("Checking third-party libraries in manifest files...\n")
-	checkthirdparties.CheckThirdParties(token)
+	checkthirdparties.CheckThirdParties(token, commitsToCheck)
 }

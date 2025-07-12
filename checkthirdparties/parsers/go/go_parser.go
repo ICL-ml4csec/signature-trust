@@ -19,7 +19,7 @@ type Replacement struct {
 
 var replaceMap = make(map[string]Replacement)
 
-func parseGoDependencyLine(line string, token string) {
+func parseGoDependencyLine(line string, token string, commitsToCheck int) {
 	line = strings.TrimSpace(line)
 
 	if strings.HasPrefix(line, "//") || line == "" {
@@ -74,7 +74,7 @@ func parseGoDependencyLine(line string, token string) {
 			return
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", cleanedRepo, sha)
+		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", cleanedRepo, sha, commitsToCheck)
 		checksignature.CheckSignature(commitsURL, token)
 		return
 	}
@@ -85,10 +85,14 @@ func parseGoDependencyLine(line string, token string) {
 		return
 	}
 
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", cleanedRepo, sha)
+	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", cleanedRepo, sha, commitsToCheck)
 	checksignature.CheckSignature(commitsURL, token)
 
-	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, token)
+	config := checksignature.LocalCheckConfig{
+		MaxCommits: commitsToCheck,
+	}
+
+	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, token, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return
@@ -96,7 +100,7 @@ func parseGoDependencyLine(line string, token string) {
 	helpers.PrintSignatureResults(results, "Local")
 }
 
-func ParseGo(file string, token string) error {
+func ParseGo(file string, token string, commitsToCheck int) error {
 	data, err := os.Open(file)
 	if err != nil {
 		return fmt.Errorf("error opening go.mod: %v", err)
@@ -163,7 +167,7 @@ func ParseGo(file string, token string) error {
 		}
 		if inRequireBlock || strings.HasPrefix(line, "require ") {
 			line = strings.TrimPrefix(line, "require ")
-			parseGoDependencyLine(line, token)
+			parseGoDependencyLine(line, token, commitsToCheck)
 		}
 	}
 
