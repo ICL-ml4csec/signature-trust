@@ -113,8 +113,7 @@ func ParseRequirements(file string, token string, commitsToCheck int) error {
 			continue
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", normalisedRepo, sha, commitsToCheck)
-		checksignature.CheckSignature(commitsURL, token)
+		checksignature.CheckSignature(normalisedRepo, sha, token, commitsToCheck)
 
 		// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
 		// if err != nil {

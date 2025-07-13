@@ -19,7 +19,7 @@ type Replacement struct {
 
 var replaceMap = make(map[string]Replacement)
 
-func parseGoDependencyLine(line string, token string, commitsToCheck int) {
+func parseGoDependencyLine(line string, token string, config checksignature.LocalCheckConfig) {
 	line = strings.TrimSpace(line)
 
 	if strings.HasPrefix(line, "//") || line == "" {
@@ -74,8 +74,7 @@ func parseGoDependencyLine(line string, token string, commitsToCheck int) {
 			return
 		}
 
-		commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", cleanedRepo, sha, commitsToCheck)
-		checksignature.CheckSignature(commitsURL, token)
+		checksignature.CheckSignature(cleanedRepo, sha, token, config.CommitsToCheck)
 		return
 	}
 
@@ -84,23 +83,17 @@ func parseGoDependencyLine(line string, token string, commitsToCheck int) {
 		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", cleanedRepo, version, err)
 		return
 	}
-
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", cleanedRepo, sha, commitsToCheck)
-	checksignature.CheckSignature(commitsURL, token)
-
-	config := checksignature.LocalCheckConfig{
-		MaxCommits: commitsToCheck,
-	}
+	checksignature.CheckSignature(cleanedRepo, sha, token, config.CommitsToCheck)
 
 	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, token, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return
 	}
-	helpers.PrintSignatureResults(results, "Local")
+	helpers.PrintSignatureResults(results, "Local", config)
 }
 
-func ParseGo(file string, token string, commitsToCheck int) error {
+func ParseGo(file string, token string, config checksignature.LocalCheckConfig) error {
 	data, err := os.Open(file)
 	if err != nil {
 		return fmt.Errorf("error opening go.mod: %v", err)
@@ -153,6 +146,10 @@ func ParseGo(file string, token string, commitsToCheck int) error {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
+		if strings.HasPrefix(line, "//") {
+			continue
+		}
+
 		if strings.Contains(line, "indirect") {
 			fmt.Printf("This tool checks only explicitly declared dependencies. Skipping indirect dependency: %s \n\n", line)
 			continue
@@ -167,7 +164,7 @@ func ParseGo(file string, token string, commitsToCheck int) error {
 		}
 		if inRequireBlock || strings.HasPrefix(line, "require ") {
 			line = strings.TrimPrefix(line, "require ")
-			parseGoDependencyLine(line, token, commitsToCheck)
+			parseGoDependencyLine(line, token, config)
 		}
 	}
 

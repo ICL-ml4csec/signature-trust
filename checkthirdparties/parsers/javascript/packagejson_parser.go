@@ -37,8 +37,7 @@ func printResults(depType, pkg, version, repo, sha, token string, commitsToCheck
 	fmt.Printf("Manifest: package.json (%s)\n", depType)
 	fmt.Printf("Package: %s Version: %s\n", pkg, version)
 	fmt.Printf("Repository URL: %s\n", repo)
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=%v", repo, sha, commitsToCheck)
-	checksignature.CheckSignature(commitsURL, token)
+	checksignature.CheckSignature(repo, sha, token, commitsToCheck)
 }
 
 func ParsePackageJSON(file string, token string, commitsToCheck int) error {
