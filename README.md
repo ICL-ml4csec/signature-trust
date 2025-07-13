@@ -54,23 +54,29 @@ Verify that **every commit on your branch and in your third‑party dependencies
 ### Using the CLI directly
 Requires Go ≥ 1.23 and a Personal Access Token (PAT).
 ```bash 
-go run ./main.go <owner/repo> <branch> <PAT>
+go run ./main.go <owner/repo> <branch> <PAT> <commits> <expired> <untrusted> <uncertified> <missingkey>
 ```
 
 Example:
 ```bash
 export GITHUB_TOKEN="ghp_yourTokenHere"
 
-go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN"
+go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" 30 true false false true
 ```
 
 The program will
 
-1. Fetch the last 100 commits on the target branch and print the percentage that are signed.
-2. Parse `go.mod` and `requirements.txt` (if present), resolve each dependency’s tag → commit SHA, then print the percentage of signed commits for the most recent 30 commits on that SHA’s branch.
+1. Fetch the last `n` commits on the target branch and print the percentage that are signed according to GitHub API and local validation. Local checks factor in user-defined trust configuration:
 
+   * `CommitsToCheck`: number of commits to check (e.g. 30 or "all")
+   * `AcceptExpiredKeys`: true/false
+   * `AcceptUntrustedSigners`: true/false
+   * `AcceptUncertifiedKeys`: true/false
+   * `AcceptMissingPublicKey`: true/false
 
-### Running with Docker
+2. Parse `go.mod`, `requirements.txt`, and `package.json` (if present), resolve each dependency’s tag → commit SHA, then print the percentage of signed commits for the most recent `n` commits on that SHA’s branch.
+
+<!-- ### Running with Docker
 
 ```bash
 # 1. Build the image
@@ -79,7 +85,7 @@ docker build -t commit-verifier .
 # 2. Scan a repo (replace the placeholders)
 docker run --rm commit-verifier <owner/repo> <branch> <PAT>
 ```
-All dependencies are already in the image; no Go installation required on the host.
+All dependencies are already in the image; no Go installation required on the host. -->
 
 ### Dry-run the workflow:
 ```bash
@@ -91,39 +97,72 @@ All dependencies are already in the image; no Go installation required on the ho
 ## Sample output
 
 ```text
-Checking commits for repository: ICL-ml4csec/msc-hmj24 on branch: feature/commit-check
-Verified commits: 50.00%
+Checking commits for repository: ICL-ml4csec/msc-hmj24 on branch: development
+Verified commits: 100.00% (5 out of 5)
 
-Manifest: go.mod
-Package: gorilla/mux Version: v1.8.1
-Repository URL: gorilla/mux
-Verified commits: 93.33%
+Checking commits locally for repository: ICL-ml4csec/msc-hmj24 on branch: development
+Successfully imported SSH key(s) from https://github.com/ICL-ml4csec.keys
+Successfully imported GPG key(s) from https://github.com/ICL-ml4csec.gpg
+Results from Local:
+Commit 8a90de8abf5e8a0b3ec36bf30498e209df65d7a3 status: valid-but-not-certified
+Output:
+commit 8a90de8abf5e8a0b3ec36bf30498e209df65d7a3
+gpg: Signature made Sat Jul 12 14:56:34 2025 GMT
+gpg:                using RSA key B5690EEEBB952194
+gpg: Good signature from "GitHub <noreply@github.com>" [unknown]
+gpg: WARNING: This key is not certified with a trusted signature!
+gpg:          There is no indication that the signature belongs to the owner.
+Primary key fingerprint: 9684 79A1 AFF9 27E3 7D1A  566B B569 0EEE BB95 2194
+Merge: f96f53e 5775011
+Author: Hanna Margrét Jónsdóttir <121580397+hannajonsd@users.noreply.github.com>
+Date:   Sat Jul 12 15:56:34 2025 +0100
+
+    Merge pull request #6 from ICL-ml4csec/feature/verify-signatures-locally
+    
+    Feature/verify signatures locally
+
+
+Verified commit 5775011901c7d15df3fddd14eb2da3b365f53c2d status: valid
+
+Verified commit 74e31bbcd4ed664547da6064fa9e52fb7328c030 status: valid
+
+Verified commit 6ebea3afb7c627e19444d7f0d97926f448f7c2d4 status: valid
+
+Verified commit f96f53e002c5150355c655dcc9e68eca16e6d7d9 status: valid
+
+Local verified commits: 80.00%
 
 Manifest: requirements.txt
-Package: python-dotenv Version: 1.0.1
-Repository URL: theskumar/python-dotenv
-Verified commits: 63.33%
+Package: httpx Version: 0.27.2
+Repository URL: encode/httpx
+Verified commits: 100.00% (5 out of 5)
 
 Manifest: package.json (dependencies)
-Package: debug Version: 4.4.1
-Repository URL: debug-js/debug
-Verified commits: 60.00%
-
-Manifest: package.json (devDependencies)
-Package: eslint-plugin-import Version: 2.32.0
-Repository URL: import-js/eslint-plugin-import
-Verified commits: 96.67%
+Package: left-pad Version: 1.3.0
+Repository URL: stevemao/left-pad
+Verified commits: 40.00% (2 out of 5)
 ```
 
 
 ## What the tool checks today
 
-* **Repository commits:** Percentage of GPG/SSH‑signed commits for the last 100 commits on the target branch.
+**Commit Verification:** 
+* **GitHub API validation**:
+  * Checks if commits are verified via the **GitHub API** (`commit.verification.verified` field).
+  * Uses pagination to fetch `n` commits (user-defined).
+* **Local Git validation**:
+  * Clones the target repository to a temp directory.
+  * Uses `git rev-list` and `git log --show-signature` for detailed signature info.
+  * Automatically fetches missing GPG and SSH keys from GitHub.
+  * Respects user-specified trust policy flags.
+  * Outputs signed commit percentage and detailed status (valid, unsigned, expired, etc.).
+    * If a commit does not meet user-defined criteria the full signature is printed
 
+<!-- 
 * **`go.mod`** – For each Go module:
   * Extracts the module path and version.
   * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the last 30 commits on that commit’s branch.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
   * Calculates the percentage of commits signed with GPG or SSH.
 
 * **`requirements.txt`** - For each Python package:
@@ -131,7 +170,7 @@ Verified commits: 96.67%
   * Retrieves metadata from the PyPI registry.
   * Extracts and normalises the GitHub repository URL.
   * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the last 30 commits on that commit’s branch.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
   * Calculates the percentage of commits signed with GPG or SSH.
 
 * **`package.json`** - For each npm package in dependencies and devDependencies:
@@ -139,12 +178,13 @@ Verified commits: 96.67%
   * Retrieves metadata from the npm registry.
   * Extracts and normalises the GitHub repository URL.
   * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the last 30 commits on that commit’s branch.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
   * Calculates the percentage of commits signed with GPG or SSH.
-
+ -->
 
 ## Next Steps
-* Parse additional manifest types (`cargo.toml`, `pom.xml`, …) and edge‑cases in existing parsers.
-* Introduce configurable trust policies (e.g. min percentage required).
+* Introduce more configurable trust policies (e.g. type of key).
+* Decide on final output
+* Refactor code for modularity and clarity
+* Write unit tests
 * Evaluate on a set of open-source repositories.
-
