@@ -27,3 +27,8 @@ jobs:
           repository: ${{ github.repository }}
           branch: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          commits-to-check: 10
+          accept-expired-keys: true
+          accept-untrusted-signers: false
+          accept-uncertified-keys: true
+          accept-missing-public-key: false

@@ -12,20 +12,33 @@ func FileExists(filename string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func PrintSignatureResults(results []checksignature.SignatureCheckResult, label string) {
+func PrintSignatureResults(results []checksignature.SignatureCheckResult, label string, config checksignature.LocalCheckConfig) {
 	fmt.Printf("Results from %s:\n", label)
 
 	verified := 0
 	for _, result := range results {
-		if result.Status == string(checksignature.ValidSignature) ||
-			result.Status == string(checksignature.ExpiredButValidSignature) ||
-			result.Status == string(checksignature.ValidSignatureButNotCertified) {
+		status := result.Status
+		include := false
+
+		switch status {
+		case string(checksignature.ValidSignature):
+			include = true
+		case string(checksignature.ExpiredButValidSignature):
+			include = config.AcceptExpiredKeys
+		case string(checksignature.ValidSignatureButNotCertified):
+			include = config.AcceptUncertifiedKeys
+		case string(checksignature.EmailNotMatched):
+			include = config.AcceptUntrustedSigners
+		case string(checksignature.MissingPublicKey):
+			include = config.AcceptMissingPublicKey
+		}
+
+		if include {
 			verified++
+			fmt.Printf("Verified commit %s status: %s\n\n", result.CommitSHA, result.Status)
 		} else {
 			fmt.Printf("Commit %s status: %s\nOutput:\n%s\n\n", result.CommitSHA, result.Status, result.Output)
-			continue
 		}
-		fmt.Printf("Verified commit %s status: %s\n\n", result.CommitSHA, result.Status)
 	}
 
 	percent := float64(verified) / float64(len(results)) * 100

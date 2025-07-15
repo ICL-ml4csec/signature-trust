@@ -159,7 +159,16 @@ func classifySignature(output string) SignatureStatus {
 	}
 }
 
-func CheckSignatureLocal(repoPath, sha string, token string) ([]SignatureCheckResult, error) {
+type LocalCheckConfig struct {
+	CommitsToCheck         int
+	AcceptExpiredKeys      bool
+	AcceptUnsignedCommits  bool
+	AcceptUntrustedSigners bool
+	AcceptUncertifiedKeys  bool
+	AcceptMissingPublicKey bool
+}
+
+func CheckSignatureLocal(repoPath, sha string, token string, config LocalCheckConfig) ([]SignatureCheckResult, error) {
 	githubUsername := strings.Split(repoPath, "/")[0]
 
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
@@ -180,7 +189,13 @@ func CheckSignatureLocal(repoPath, sha string, token string) ([]SignatureCheckRe
 
 	_ = importGPGKeyFromGitHub(githubUsername, token)
 
-	cmd := exec.Command("git", "rev-list", "-n", "10", sha)
+	var cmd *exec.Cmd
+	if config.CommitsToCheck > 0 {
+		cmd = exec.Command("git", "rev-list", "-n", fmt.Sprintf("%d", config.CommitsToCheck), sha)
+	} else {
+		cmd = exec.Command("git", "rev-list", sha)
+	}
+
 	cmd.Dir = tmpDir
 	shaListRaw, err := cmd.Output()
 	if err != nil {

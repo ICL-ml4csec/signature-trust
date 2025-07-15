@@ -11,6 +11,25 @@ inputs:
   token:
     description: "GitHub token"
     required: true
+  commits-to-check:
+    description: "Number of commits to check"
+    required: true
+  accept-expired-keys:
+    description: "Treat expired but valid signatures as trusted"
+    required: false
+    default: "false"
+  accept-untrusted-signers:
+    description: "Treat signatures where email does not match as trusted"
+    required: false
+    default: "false"
+  accept-uncertified-keys:
+    description: "Treat valid signatures without certification as trusted"
+    required: false
+    default: "false"
+  accept-missing-public-key:
+    description: "Treat signatures with missing public keys as trusted"
+    required: false
+    default: "false"
 
 runs:
   using: "docker"
@@ -19,3 +38,8 @@ runs:
     - ${{ inputs.repository }}
     - ${{ inputs.branch }}
     - ${{ inputs.token }}
+    - ${{ inputs.commits-to-check }}
+    - ${{ inputs.accept-expired-keys }}
+    - ${{ inputs.accept-untrusted-signers }}
+    - ${{ inputs.accept-uncertified-keys }}
+    - ${{ inputs.accept-missing-public-key }}

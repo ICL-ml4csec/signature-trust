@@ -33,15 +33,14 @@ func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
 	return repoURL
 }
 
-func printResults(depType, pkg, version, repo, sha, token string) {
+func printResults(depType, pkg, version, repo, sha, token string, commitsToCheck int) {
 	fmt.Printf("Manifest: package.json (%s)\n", depType)
 	fmt.Printf("Package: %s Version: %s\n", pkg, version)
 	fmt.Printf("Repository URL: %s\n", repo)
-	commitsURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?sha=%s&per_page=10", repo, sha)
-	checksignature.CheckSignature(commitsURL, token)
+	checksignature.CheckSignature(repo, sha, token, commitsToCheck)
 }
 
-func ParsePackageJSON(file string, token string) error {
+func ParsePackageJSON(file string, token string, commitsToCheck int) error {
 	var packageJSON PackageJSON
 
 	data, err := os.ReadFile(file)
@@ -78,7 +77,7 @@ func ParsePackageJSON(file string, token string) error {
 					continue
 				}
 
-				printResults(depType, pkg, tag, repo, sha, token)
+				printResults(depType, pkg, tag, repo, sha, token, commitsToCheck)
 				continue
 
 			case "github-shorthand":
@@ -95,7 +94,7 @@ func ParsePackageJSON(file string, token string) error {
 					continue
 				}
 
-				printResults(depType, normalisedName, tag, repo, sha, token)
+				printResults(depType, normalisedName, tag, repo, sha, token, commitsToCheck)
 				continue
 
 			default:
@@ -171,7 +170,7 @@ func ParsePackageJSON(file string, token string) error {
 					continue
 				}
 
-				printResults(depType, pkg, resolved, normalisedRepo, sha, token)
+				printResults(depType, pkg, resolved, normalisedRepo, sha, token, commitsToCheck)
 
 				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
 				// if err != nil {
