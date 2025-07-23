@@ -1,13 +1,12 @@
 package checksignature
 
 import (
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/ICL-ml4sec/msc-hmj24/client"
 )
 
 type SignatureStatus string
@@ -30,83 +29,22 @@ type SignatureCheckResult struct {
 	Err       error
 }
 
-func extractKeyID(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.Contains(line, "using RSA key") {
-			parts := strings.Fields(line)
-			return parts[len(parts)-1]
-		}
-	}
-	return ""
+type LocalCheckConfig struct {
+	CommitsToCheck         int
+	AcceptExpiredKeys      bool
+	AcceptUnsignedCommits  bool
+	AcceptUntrustedSigners bool
+	AcceptUncertifiedKeys  bool
+	AcceptMissingPublicKey bool
 }
 
-func importGPGKeyFromGitHub(username string, token string) error {
-	url := fmt.Sprintf("https://github.com/%s.gpg", username)
-	resp, err := client.DoGet(url, token)
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("GitHub GPG key not found for user %s (status: %d)", username, resp.StatusCode)
-	}
-
-	if err != nil {
-		return fmt.Errorf("HTTP error fetching GitHub GPG key: %v", err)
-	}
-	defer resp.Body.Close()
-
-	cmd := exec.Command("gpg", "--import")
-	cmd.Stdin = resp.Body
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to import GitHub GPG key for %s: %v\nOutput:\n%s", username, err, string(out))
-	}
-
-	fmt.Printf("Successfully imported GPG key(s) from https://github.com/%s.gpg\n", username)
-	return nil
-}
-
-func importSSHKeysFromGitHub(username string, token string) (string, error) {
-	url := fmt.Sprintf("https://github.com/%s.keys", username)
-	resp, err := client.DoGet(url, token)
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub SSH keys not found for user %s (status: %d)", username, resp.StatusCode)
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("HTTP error fetching GitHub SSH keys: %v", err)
-	}
-	defer resp.Body.Close()
-
-	keys, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read SSH key response: %v", err)
-	}
-
-	tmpFile, err := os.CreateTemp("", "allowed_signers_*.txt")
-	if err != nil {
-		return "", fmt.Errorf("failed to create allowed_signers file: %v", err)
-	}
-	defer tmpFile.Close()
-
-	lines := strings.Split(string(keys), "\n")
-	for _, key := range lines {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		line := fmt.Sprintf("%s %s\n", username, key)
-		if _, err := tmpFile.WriteString(line); err != nil {
-			return "", fmt.Errorf("failed to write to allowed_signers file: %v", err)
-		}
-	}
-
-	configCmd := exec.Command("git", "config", "--global", "gpg.ssh.allowedSignersFile", tmpFile.Name())
-	if out, err := configCmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed to set git config: %v\n%s", err, string(out))
-	}
-
-	fmt.Printf("Successfully imported SSH key(s) from https://github.com/%s.keys\n", username)
-	return tmpFile.Name(), nil
+type SSHSignatureData struct {
+	ArmoredSignature string
+	SignatureBlob    []byte
+	Namespace        string
+	HashAlgorithm    string
+	PublicKey        []byte
+	Signature        []byte
 }
 
 func extractEmailsFromSignatureOutput(output string) (signerEmail string, authorEmail string) {
@@ -159,18 +97,477 @@ func classifySignature(output string) SignatureStatus {
 	}
 }
 
-type LocalCheckConfig struct {
-	CommitsToCheck         int
-	AcceptExpiredKeys      bool
-	AcceptUnsignedCommits  bool
-	AcceptUntrustedSigners bool
-	AcceptUncertifiedKeys  bool
-	AcceptMissingPublicKey bool
+func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
+	content := string(raw)
+
+	if !strings.Contains(content, "gpgsig -----BEGIN PGP SIGNATURE-----") {
+		return UnsignedCommit, "No PGP signature found", nil
+	}
+
+	lines := strings.Split(content, "\n")
+
+	sigStart := -1
+	sigEnd := -1
+
+	for i, line := range lines {
+		if strings.HasPrefix(line, "gpgsig -----BEGIN PGP SIGNATURE-----") {
+			sigStart = i
+		}
+		if strings.HasPrefix(line, " -----END PGP SIGNATURE-----") {
+			sigEnd = i
+			break
+		}
+	}
+
+	if sigStart == -1 || sigEnd == -1 {
+		return VerificationError, "Wrong PGP signature format", nil
+	}
+
+	var sigLines []string
+	for i := sigStart; i <= sigEnd; i++ {
+		line := lines[i]
+		if strings.HasPrefix(line, "gpgsig ") {
+			sigContent := strings.TrimPrefix(line, "gpgsig ")
+			sigLines = append(sigLines, sigContent)
+		} else if strings.HasPrefix(line, " ") {
+			sigContent := strings.TrimPrefix(line, " ")
+			sigLines = append(sigLines, sigContent)
+		}
+	}
+
+	signature := strings.Join(sigLines, "\n")
+	publicKey, keyID, err := extractPGPPublicKeyFromSignature(signature)
+
+	var keyImported bool
+	if err == nil && publicKey != "" {
+		if importErr := importPGPKeyDirectly(publicKey); importErr == nil {
+			keyImported = true
+		}
+	}
+
+	var payloadLines []string
+	for i, line := range lines {
+		if i < sigStart || i > sigEnd {
+			payloadLines = append(payloadLines, line)
+		}
+	}
+
+	for len(payloadLines) > 0 && payloadLines[len(payloadLines)-1] == "" {
+		payloadLines = payloadLines[:len(payloadLines)-1]
+	}
+
+	payload := strings.Join(payloadLines, "\n") + "\n"
+	payloadBytes := []byte(payload)
+
+	sigFile, err := os.CreateTemp("", "*.sig")
+	if err != nil {
+		return VerificationError, "", err
+	}
+	defer os.Remove(sigFile.Name())
+	defer sigFile.Close()
+
+	payloadFile, err := os.CreateTemp("", "*.txt")
+	if err != nil {
+		return VerificationError, "", err
+	}
+	defer os.Remove(payloadFile.Name())
+	defer payloadFile.Close()
+
+	if _, err := sigFile.Write([]byte(signature)); err != nil {
+		return VerificationError, "", err
+	}
+	sigFile.Close()
+
+	if _, err := payloadFile.Write(payloadBytes); err != nil {
+		return VerificationError, "", err
+	}
+	payloadFile.Close()
+
+	cmd := exec.Command("gpg", "--verify", sigFile.Name(), payloadFile.Name())
+	output, err := cmd.CombinedOutput()
+	status := classifySignature(string(output))
+
+	if status == MissingPublicKey && keyImported {
+		return MissingPublicKey, fmt.Sprintf("PGP signature found with key ID %s, but verification failed: %s", keyID, string(output)), err
+	}
+
+	return status, string(output), err
+}
+
+func extractPGPPublicKeyFromSignature(signature string) (publicKey string, keyID string, err error) {
+	cmd := exec.Command("gpg", "--list-packets")
+	cmd.Stdin = strings.NewReader(signature)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse PGP signature: %v", err)
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "keyid") {
+			parts := strings.Fields(line)
+			for i, part := range parts {
+				if part == "keyid" && i+1 < len(parts) {
+					keyID = parts[i+1]
+					break
+				}
+			}
+		}
+	}
+
+	if keyID == "" {
+		return "", "", fmt.Errorf("could not extract key ID from signature")
+	}
+
+	publicKey, err = fetchPGPKeyFromKeyserver(keyID)
+	if err != nil {
+		return "", keyID, fmt.Errorf("could not fetch key %s from keyservers: %v", keyID, err)
+	}
+
+	return publicKey, keyID, nil
+}
+
+func fetchPGPKeyFromKeyserver(keyID string) (string, error) {
+	keyservers := []string{
+		"keyserver.ubuntu.com",
+		"keys.openpgp.org",
+		"pgp.mit.edu",
+	}
+
+	for _, server := range keyservers {
+		cmd := exec.Command("gpg", "--keyserver", server, "--recv-keys", keyID)
+		if err := cmd.Run(); err == nil {
+			exportCmd := exec.Command("gpg", "--armor", "--export", keyID)
+			output, exportErr := exportCmd.Output()
+			if exportErr == nil {
+				return string(output), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("key not found on any keyserver")
+}
+
+func importPGPKeyDirectly(publicKey string) error {
+	cmd := exec.Command("gpg", "--import")
+	cmd.Stdin = strings.NewReader(publicKey)
+	return cmd.Run()
+}
+
+func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
+	content := string(raw)
+
+	if !strings.Contains(content, "gpgsig -----BEGIN SSH SIGNATURE-----") {
+		return UnsignedCommit, "No SSH signature found", nil
+	}
+
+	authorEmail := extractAuthorEmail(content)
+
+	sshSig, err := extractSSHSignatureData(content)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to parse SSH signature: %v", err), err
+	}
+
+	publicKey, err := extractPublicKeyFromSSHSignature(sshSig.SignatureBlob)
+	if err != nil {
+		return MissingPublicKey, fmt.Sprintf("Failed to extract public key: %v", err), err
+	}
+
+	allowedSignersFile, err := createAllowedSignersFileWithEmail(authorEmail, publicKey)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to create allowed signers file: %v", err), err
+	}
+	defer os.Remove(allowedSignersFile)
+
+	payloadFormats := []struct { // WIP
+		name string
+		data []byte
+	}{
+		{
+			name: "Original commit without signature (with final newline)",
+			data: []byte(removeSSHSignatureFromCommit(content)),
+		},
+		{
+			name: "Original commit without signature (no final newline)",
+			data: []byte(strings.TrimSuffix(removeSSHSignatureFromCommit(content), "\n")),
+		},
+		{
+			name: "Git object format with header",
+			data: func() []byte {
+				payload := removeSSHSignatureFromCommit(content)
+				payload = strings.TrimSuffix(payload, "\n")
+				return []byte(fmt.Sprintf("commit %d\x00%s", len(payload), payload))
+			}(),
+		},
+	}
+
+	for _, format := range payloadFormats {
+		success, output, _ := verifyWithSSHKeygen(sshSig.ArmoredSignature, format.data, allowedSignersFile, authorEmail, sshSig.Namespace)
+		if success {
+			return ValidSignature, output, nil
+		}
+	}
+
+	return InvalidSignature, "SSH signature verification failed", nil
+}
+
+func extractAuthorEmail(content string) string {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "author ") {
+			start := strings.Index(line, "<")
+			end := strings.Index(line, ">")
+			if start != -1 && end != -1 && end > start {
+				return line[start+1 : end]
+			}
+		}
+	}
+	return ""
+}
+
+func createAllowedSignersFileWithEmail(email, publicKey string) (string, error) {
+	tmpFile, err := os.CreateTemp("", "allowed_signers_*.txt")
+	if err != nil {
+		return "", err
+	}
+	defer tmpFile.Close()
+
+	line := fmt.Sprintf("%s namespaces=\"git\" %s\n", email, publicKey)
+	if _, err := tmpFile.WriteString(line); err != nil {
+		return "", err
+	}
+
+	return tmpFile.Name(), nil
+}
+
+func extractSSHSignatureData(content string) (*SSHSignatureData, error) {
+	lines := strings.Split(content, "\n")
+
+	sigStart := -1
+	sigEnd := -1
+
+	for i, line := range lines {
+		if strings.HasPrefix(line, "gpgsig -----BEGIN SSH SIGNATURE-----") {
+			sigStart = i
+		}
+		if strings.HasPrefix(line, " -----END SSH SIGNATURE-----") {
+			sigEnd = i
+			break
+		}
+	}
+
+	if sigStart == -1 || sigEnd == -1 {
+		return nil, fmt.Errorf("wrong SSH signature format")
+	}
+
+	var sigLines []string
+	for i := sigStart; i <= sigEnd; i++ {
+		line := lines[i]
+		if strings.HasPrefix(line, "gpgsig ") {
+			sigContent := strings.TrimPrefix(line, "gpgsig ")
+			sigLines = append(sigLines, sigContent)
+		} else if strings.HasPrefix(line, " ") {
+			sigContent := strings.TrimPrefix(line, " ")
+			sigLines = append(sigLines, sigContent)
+		}
+	}
+
+	armoredSig := strings.Join(sigLines, "\n")
+
+	var b64Data string
+	for _, line := range sigLines {
+		line = strings.TrimSpace(line)
+		if line != "-----BEGIN SSH SIGNATURE-----" && line != "-----END SSH SIGNATURE-----" && line != "" {
+			b64Data += line
+		}
+	}
+
+	sigBlob, err := base64.StdEncoding.DecodeString(b64Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode signature: %v", err)
+	}
+
+	if len(sigBlob) < 6 || string(sigBlob[0:6]) != "SSHSIG" {
+		return nil, fmt.Errorf("invalid SSH signature magic")
+	}
+
+	offset := 6
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	offset += 4
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	pubKeyLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4
+
+	if len(sigBlob) < offset+int(pubKeyLen) {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	pubKeyBlob := sigBlob[offset : offset+int(pubKeyLen)]
+	offset += int(pubKeyLen)
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	namespaceLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4
+
+	if len(sigBlob) < offset+int(namespaceLen) {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	namespace := string(sigBlob[offset : offset+int(namespaceLen)])
+	offset += int(namespaceLen)
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	reservedLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4 + int(reservedLen)
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	hashAlgLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4
+
+	if len(sigBlob) < offset+int(hashAlgLen) {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	hashAlg := string(sigBlob[offset : offset+int(hashAlgLen)])
+	offset += int(hashAlgLen)
+
+	if len(sigBlob) < offset+4 {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	signatureLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4
+
+	if len(sigBlob) < offset+int(signatureLen) {
+		return nil, fmt.Errorf("invalid signature format")
+	}
+	signature := sigBlob[offset : offset+int(signatureLen)]
+
+	return &SSHSignatureData{
+		ArmoredSignature: armoredSig,
+		SignatureBlob:    sigBlob,
+		Namespace:        namespace,
+		HashAlgorithm:    hashAlg,
+		PublicKey:        pubKeyBlob,
+		Signature:        signature,
+	}, nil
+}
+
+func extractPublicKeyFromSSHSignature(sigBlob []byte) (string, error) {
+	if len(sigBlob) < 10 {
+		return "", fmt.Errorf("signature blob too short")
+	}
+
+	offset := 6
+	offset += 4
+
+	if len(sigBlob) < offset+4 {
+		return "", fmt.Errorf("invalid format")
+	}
+	pubKeyLen := binary.BigEndian.Uint32(sigBlob[offset : offset+4])
+	offset += 4
+
+	if len(sigBlob) < offset+int(pubKeyLen) {
+		return "", fmt.Errorf("invalid format")
+	}
+	pubKeyBlob := sigBlob[offset : offset+int(pubKeyLen)]
+
+	if len(pubKeyBlob) < 4 {
+		return "", fmt.Errorf("public key blob too short")
+	}
+
+	keyTypeLen := binary.BigEndian.Uint32(pubKeyBlob[0:4])
+	if len(pubKeyBlob) < 4+int(keyTypeLen) {
+		return "", fmt.Errorf("invalid key blob")
+	}
+
+	keyType := string(pubKeyBlob[4 : 4+int(keyTypeLen)])
+
+	keyData := base64.StdEncoding.EncodeToString(pubKeyBlob)
+
+	return fmt.Sprintf("%s %s", keyType, keyData), nil
+}
+
+func removeSSHSignatureFromCommit(content string) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+
+	skipUntilEmpty := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "gpgsig -----BEGIN SSH SIGNATURE-----") {
+			skipUntilEmpty = true
+			continue
+		}
+		if skipUntilEmpty {
+			if line == "" || !strings.HasPrefix(line, " ") {
+				skipUntilEmpty = false
+				if line != "" && !strings.HasPrefix(line, " ") {
+					result = append(result, line)
+				}
+			}
+			continue
+		}
+		result = append(result, line)
+	}
+
+	resultStr := strings.Join(result, "\n")
+	if !strings.HasSuffix(resultStr, "\n") {
+		resultStr += "\n"
+	}
+
+	return resultStr
+}
+
+func verifyWithSSHKeygen(armoredSig string, signedData []byte, allowedSignersFile, identity, namespace string) (bool, string, error) {
+	sigFile, err := os.CreateTemp("", "*.ssh-sig")
+	if err != nil {
+		return false, "", err
+	}
+	defer os.Remove(sigFile.Name())
+	defer sigFile.Close()
+
+	dataFile, err := os.CreateTemp("", "*.txt")
+	if err != nil {
+		return false, "", err
+	}
+	defer os.Remove(dataFile.Name())
+	defer dataFile.Close()
+
+	if _, err := sigFile.Write([]byte(armoredSig)); err != nil {
+		return false, "", err
+	}
+	sigFile.Close()
+
+	if _, err := dataFile.Write(signedData); err != nil {
+		return false, "", err
+	}
+	dataFile.Close()
+
+	cmd := exec.Command("ssh-keygen", "-Y", "verify",
+		"-f", allowedSignersFile,
+		"-I", identity,
+		"-s", sigFile.Name(),
+		"-n", namespace,
+		"--", dataFile.Name())
+
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return false, string(output), err
+	}
+
+	return true, string(output), nil
 }
 
 func CheckSignatureLocal(repoPath, sha string, token string, config LocalCheckConfig) ([]SignatureCheckResult, error) {
-	githubUsername := strings.Split(repoPath, "/")[0]
-
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
 	tmpDir, err := os.MkdirTemp("", "repo-")
 	if err != nil {
@@ -181,13 +578,6 @@ func CheckSignatureLocal(repoPath, sha string, token string, config LocalCheckCo
 	if out, err := exec.Command("git", "clone", repoURL, tmpDir).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, out)
 	}
-
-	allowedSignersPath, err := importSSHKeysFromGitHub(githubUsername, token)
-	if err != nil {
-		fmt.Printf("Failed to import SSH keys for %s: %v\n", githubUsername, err)
-	}
-
-	_ = importGPGKeyFromGitHub(githubUsername, token)
 
 	var cmd *exec.Cmd
 	if config.CommitsToCheck > 0 {
@@ -204,44 +594,33 @@ func CheckSignatureLocal(repoPath, sha string, token string, config LocalCheckCo
 	shas := strings.Split(strings.TrimSpace(string(shaListRaw)), "\n")
 
 	var results []SignatureCheckResult
-	attemptedKeys := make(map[string]bool)
 
 	for _, s := range shas {
-		var output string
-		var status SignatureStatus
-		var err error
+		catCmd := exec.Command("git", "cat-file", "commit", s)
+		catCmd.Dir = tmpDir
+		catOut, catErr := catCmd.CombinedOutput()
 
-		gpgCmd := exec.Command("git", "log", "-1", "--show-signature", s)
-		gpgCmd.Dir = tmpDir
-		gpgOut, gpgErr := gpgCmd.CombinedOutput()
-		gpgOutput := string(gpgOut)
-
-		status = classifySignature(gpgOutput)
-		output = gpgOutput
-		err = gpgErr
-
-		if status == MissingPublicKey {
-			keyID := extractKeyID(gpgOutput)
-			if keyID != "" && !attemptedKeys[keyID] {
-				fmt.Printf("Missing GPG key %s. Attempting to fetch...\n", keyID)
-				if err := importGPGKeyFromGitHub(githubUsername, token); err != nil {
-					fmt.Printf("Failed to import key %s: %v\n", keyID, err)
-				}
-				attemptedKeys[keyID] = true
-			}
+		if catErr != nil {
+			results = append(results, SignatureCheckResult{
+				CommitSHA: s,
+				Status:    string(VerificationError),
+				Output:    string(catOut),
+				Err:       catErr,
+			})
+			continue
 		}
 
+		status, output, err := verifyPGPSignature(catOut)
+
 		if status == UnsignedCommit || status == MissingPublicKey {
-			sshCmd := exec.Command("git", "-c", "gpg.format=ssh",
-				"-c", fmt.Sprintf("gpg.ssh.allowedSignersFile=%s", allowedSignersPath),
-				"log", "-1", "--show-signature", s)
-			sshCmd.Dir = tmpDir
-			sshOut, sshErr := sshCmd.CombinedOutput()
-			sshOutput := string(sshOut)
 
-			sshStatus := classifySignature(sshOutput)
+			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut)
 
-			if sshStatus != UnsignedCommit && sshStatus != InvalidSignature {
+			if sshStatus == ValidSignature {
+				status = sshStatus
+				output = sshOutput
+				err = sshErr
+			} else if sshStatus != UnsignedCommit {
 				status = sshStatus
 				output = sshOutput
 				err = sshErr
