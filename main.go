@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
-	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties"
 	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/helpers"
 )
 
@@ -65,6 +64,6 @@ func main() {
 	}
 	helpers.PrintSignatureResults(results, "Local", config)
 
-	fmt.Printf("Checking third-party libraries in manifest files...\n")
-	checkthirdparties.CheckThirdParties(token, config)
+	// fmt.Printf("Checking third-party libraries in manifest files...\n")
+	// checkthirdparties.CheckThirdParties(token, config)
 }
