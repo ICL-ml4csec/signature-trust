@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties"
 	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/helpers"
 )
 
@@ -57,13 +58,13 @@ func main() {
 		AcceptMissingPublicKey: acceptMissingPublicKey,
 	}
 
-	results, err := checksignature.CheckSignatureLocal(repo, sha, token, config)
+	results, err := checksignature.CheckSignatureLocal(repo, sha, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return
 	}
 	helpers.PrintSignatureResults(results, "Local", config)
 
-	// fmt.Printf("Checking third-party libraries in manifest files...\n")
-	// checkthirdparties.CheckThirdParties(token, config)
+	fmt.Printf("Checking third-party libraries in manifest files...\n")
+	checkthirdparties.CheckThirdParties(token, config)
 }
