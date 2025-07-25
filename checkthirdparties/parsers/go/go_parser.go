@@ -85,7 +85,7 @@ func parseGoDependencyLine(line string, token string, config checksignature.Loca
 	}
 	checksignature.CheckSignature(cleanedRepo, sha, token, config.CommitsToCheck)
 
-	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, token, config)
+	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return
