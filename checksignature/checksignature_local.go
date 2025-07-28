@@ -320,10 +320,6 @@ func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
 	switch keyType {
 	case "ssh-ed25519":
 		return verifyEd25519SSH(sshSig, content)
-	// case "ssh-rsa":
-	//     return verifyRSASSH(sshSig, content)
-	// case "ecdsa-sha2-nistp256":
-	//     return verifyECDSASSH(sshSig, content)
 	default:
 		return ValidSignatureButNotCertified,
 			fmt.Sprintf("SSH signature with %s key found but verification not implemented", keyType), nil
