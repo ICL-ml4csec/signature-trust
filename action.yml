@@ -30,6 +30,10 @@ inputs:
     description: "Treat signatures with missing public keys as trusted"
     required: false
     default: "false"
+  accept-github-automated:
+    description: "Treat GitHub automated signatures as trusted"
+    required: false
+    default: "false"
 
 runs:
   using: "docker"
@@ -43,3 +47,4 @@ runs:
     - ${{ inputs.accept-untrusted-signers }}
     - ${{ inputs.accept-uncertified-keys }}
     - ${{ inputs.accept-missing-public-key }}
+    - ${{ inputs.accept-github-automated }}
