@@ -38,6 +38,7 @@ func main() {
 	acceptUntrustedSigners := strings.ToLower(os.Args[6]) == "true"
 	acceptUncertifiedKeys := strings.ToLower(os.Args[7]) == "true"
 	acceptMissingPublicKey := strings.ToLower(os.Args[8]) == "true"
+	acceptGitHubAutomated := strings.ToLower(os.Args[9]) == "true"
 
 	sha, err := helpers.GetSHAFromBranch(repo, branch, token)
 	if err != nil {
@@ -56,6 +57,7 @@ func main() {
 		AcceptUntrustedSigners: acceptUntrustedSigners,
 		AcceptUncertifiedKeys:  acceptUncertifiedKeys,
 		AcceptMissingPublicKey: acceptMissingPublicKey,
+		AcceptGitHubAutomated:  acceptGitHubAutomated,
 	}
 
 	results, err := checksignature.CheckSignatureLocal(repo, sha, config)

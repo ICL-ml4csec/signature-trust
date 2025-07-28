@@ -28,6 +28,7 @@ const (
 	UnsignedCommit                SignatureStatus = "unsigned"
 	VerificationError             SignatureStatus = "error"
 	EmailNotMatched               SignatureStatus = "signed-but-untrusted-email"
+	GitHubAutomatedSignature      SignatureStatus = "github-automated-signature"
 )
 
 type SignatureCheckResult struct {
@@ -44,6 +45,7 @@ type LocalCheckConfig struct {
 	AcceptUntrustedSigners bool
 	AcceptUncertifiedKeys  bool
 	AcceptMissingPublicKey bool
+	AcceptGitHubAutomated  bool
 }
 
 type SSHSignatureData struct {
@@ -97,6 +99,29 @@ func checkEmailMismatch(commitData []byte, signerEmail string) bool {
 
 	if commitAuthorEmail != "" && signerEmail != "" {
 		return commitAuthorEmail != signerEmail
+	}
+	return false
+}
+
+func isGitHubAutomatedCommit(gpgOutput string, content string, sshSig *SSHSignatureData) bool {
+	authorEmail := extractAuthorEmail(content)
+	if authorEmail == "noreply@github.com" ||
+		strings.HasSuffix(authorEmail, "@users.noreply.github.com") {
+		return true
+	}
+
+	if gpgOutput != "" {
+		if strings.Contains(gpgOutput, "noreply@github.com") ||
+			strings.Contains(gpgOutput, "GitHub <noreply@github.com>") {
+			return true
+		}
+	}
+
+	if sshSig != nil {
+		if sshSig.IdentityComment == "noreply@github.com" ||
+			strings.HasSuffix(sshSig.IdentityComment, "@users.noreply.github.com") {
+			return true
+		}
 	}
 	return false
 }
@@ -221,6 +246,10 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 	output, err := cmd.CombinedOutput()
 	status := classifySignature(string(output))
 
+	if isGitHubAutomatedCommit(string(output), content, nil) {
+		return GitHubAutomatedSignature, string(output), err
+	}
+
 	if status == ValidSignature {
 		signerEmail, _ := extractEmailsFromSignatureOutput(string(output))
 		if checkEmailMismatch(raw, signerEmail) {
@@ -315,6 +344,10 @@ func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
 	keyType, err := getSSHKeyType(sshSig.PublicKey)
 	if err != nil {
 		return VerificationError, fmt.Sprintf("Failed to determine key type: %v", err), err
+	}
+
+	if isGitHubAutomatedCommit("", content, sshSig) {
+		return GitHubAutomatedSignature, "GitHub automated SSH signature detected", nil
 	}
 
 	switch keyType {
