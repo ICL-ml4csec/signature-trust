@@ -31,6 +31,8 @@ func PrintSignatureResults(results []checksignature.SignatureCheckResult, label 
 			include = config.AcceptUntrustedSigners
 		case string(checksignature.MissingPublicKey):
 			include = config.AcceptMissingPublicKey
+		case string(checksignature.GitHubAutomatedSignature):
+			include = config.AcceptGitHubAutomated
 		}
 
 		if include {
