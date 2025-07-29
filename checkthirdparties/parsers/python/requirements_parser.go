@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
-	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/helpers"
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
 type pypiResponse struct {

@@ -15,6 +15,9 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
 type SignatureStatus string
@@ -39,7 +42,9 @@ type SignatureCheckResult struct {
 }
 
 type LocalCheckConfig struct {
+	Branch                 string
 	CommitsToCheck         int
+	OldestSHA              string
 	AcceptExpiredKeys      bool
 	AcceptUnsignedCommits  bool
 	AcceptUntrustedSigners bool
@@ -612,7 +617,7 @@ func removeSSHSignatureFromCommit(raw string) string {
 	return b.String()
 }
 
-func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]SignatureCheckResult, error) {
+func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig, timeCutoff *time.Time) ([]SignatureCheckResult, error) {
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
 	tmpDir, err := os.MkdirTemp("", "repo-")
 	if err != nil {
@@ -624,23 +629,55 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]Signa
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, out)
 	}
 
-	var cmd *exec.Cmd
-	if config.CommitsToCheck > 0 {
-		cmd = exec.Command("git", "rev-list", "-n", fmt.Sprintf("%d", config.CommitsToCheck), sha)
-	} else {
-		cmd = exec.Command("git", "rev-list", sha)
+	branchToUse := config.Branch
+	checkBranchCmd := exec.Command("git", "rev-parse", "--verify", "origin/"+branchToUse)
+	checkBranchCmd.Dir = tmpDir
+	if err := checkBranchCmd.Run(); err != nil {
+		branchToUse = helpers.GetDefaultBranch(tmpDir)
 	}
 
+	var revArgs []string
+	if timeCutoff != nil {
+		cutoffSHA, err := trustpolicies.GetSHAFromTime(tmpDir, branchToUse, *timeCutoff)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get SHA from time: %v", err)
+		}
+		if cutoffSHA != "" {
+			revArgs = []string{"git", "rev-list", "origin/" + branchToUse, "^" + cutoffSHA}
+		} else {
+			fmt.Printf("No commits older than %s on branch %s, checking all commits\n",
+				timeCutoff.Format(time.RFC3339), branchToUse)
+			revArgs = []string{"git", "rev-list", "origin/" + branchToUse}
+		}
+	} else if config.OldestSHA != "" {
+		revArgs = []string{"git", "rev-list", "origin/" + branchToUse, "^" + config.OldestSHA}
+	} else if config.CommitsToCheck > 0 {
+		revArgs = []string{"git", "rev-list", "-n", fmt.Sprint(config.CommitsToCheck), "origin/" + branchToUse}
+	} else {
+		revArgs = []string{"git", "rev-list", "origin/" + branchToUse}
+	}
+
+	cmd := exec.Command(revArgs[0], revArgs[1:]...)
 	cmd.Dir = tmpDir
 	shaListRaw, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list commits: %v", err)
+		return nil, fmt.Errorf("failed to list commits on branch %s: %v", branchToUse, err)
 	}
-	shas := strings.Split(strings.TrimSpace(string(shaListRaw)), "\n")
+
+	shaList := strings.TrimSpace(string(shaListRaw))
+	if shaList == "" {
+		return []SignatureCheckResult{}, nil
+	}
+
+	shas := strings.Split(shaList, "\n")
 
 	var results []SignatureCheckResult
 
 	for _, s := range shas {
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		catCmd := exec.CommandContext(ctx, "git", "cat-file", "commit", s)

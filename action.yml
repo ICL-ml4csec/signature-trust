@@ -34,6 +34,11 @@ inputs:
     description: "Treat GitHub automated signatures as trusted"
     required: false
     default: "false"
+  lookback:
+    description: "Lookback duration for time-based checking (e.g. '4320h' for 180 days). Leave empty for commit-count based checking."
+    required: false
+    default: ""
+
 
 runs:
   using: "docker"
@@ -48,3 +53,4 @@ runs:
     - ${{ inputs.accept-uncertified-keys }}
     - ${{ inputs.accept-missing-public-key }}
     - ${{ inputs.accept-github-automated }}
+    - ${{ inputs.lookback }}

@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os/exec"
 	"regexp"
 	"strings"
 
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
 type GitHubTag struct {
@@ -113,4 +114,24 @@ func ExtractGitTag(url string) string {
 		return url[idx+1:]
 	}
 	return ""
+}
+
+func GetDefaultBranch(repoDir string) string {
+	defaultBranchCmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	defaultBranchCmd.Dir = repoDir
+	defaultBranchOut, err := defaultBranchCmd.Output()
+	if err == nil {
+		defaultBranchFull := strings.TrimSpace(string(defaultBranchOut))
+		return strings.TrimPrefix(defaultBranchFull, "refs/remotes/origin/")
+	}
+
+	for _, defaultBranch := range []string{"main", "master"} {
+		testCmd := exec.Command("git", "rev-parse", "--verify", "origin/"+defaultBranch)
+		testCmd.Dir = repoDir
+		if testErr := testCmd.Run(); testErr == nil {
+			return defaultBranch
+		}
+	}
+
+	return "main"
 }
