@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
 func IsValidSemver(version string) bool {

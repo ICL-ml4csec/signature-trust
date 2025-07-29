@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
 type GitCommitResponse struct {

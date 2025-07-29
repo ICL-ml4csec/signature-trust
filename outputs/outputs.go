@@ -1,16 +1,10 @@
-package helpers
+package outputs
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
 )
-
-func FileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	return err == nil && !info.IsDir()
-}
 
 func PrintSignatureResults(results []checksignature.SignatureCheckResult, label string, config checksignature.LocalCheckConfig) {
 	fmt.Printf("Results from %s:\n", label)
@@ -41,6 +35,11 @@ func PrintSignatureResults(results []checksignature.SignatureCheckResult, label 
 		} else {
 			fmt.Printf("Commit %s status: %s\nOutput:\n%s\n\n", result.CommitSHA, result.Status, result.Output)
 		}
+	}
+
+	if verified == 0 {
+		fmt.Printf("No verified commits found in %s results.\n\n", label)
+		return
 	}
 
 	percent := float64(verified) / float64(len(results)) * 100
