@@ -13,7 +13,7 @@ import (
 )
 
 func IsValidSemver(version string) bool {
-	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z\-\.]+)?(?:\+[\da-zA-Z\-\.]+)?$`)
+	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-sA-s\-\.]+)?(?:\+[\da-sA-s\-\.]+)?$`)
 	return semverRegex.MatchString(version)
 }
 

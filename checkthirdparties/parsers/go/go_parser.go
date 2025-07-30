@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ICL-ml4csec/msc-hmj24/analysing"
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 	"github.com/ICL-ml4csec/msc-hmj24/outputs"
@@ -85,14 +86,32 @@ func parseGoDependencyLine(line string, token string, config checksignature.Loca
 		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", cleanedRepo, version, err)
 		return
 	}
-	// checksignature.CheckSignature(cleanedRepo, sha, token, config.CommitsToCheck)
 
-	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, config, timeCutoff)
+	fmt.Printf("Checking third-party library: %s@%s\n", cleanedRepo, version)
+	if config.KeyCreationCutoff != nil {
+		fmt.Printf("Key age policy: keys must be older than %s\n",
+			config.KeyCreationCutoff.Format(time.RFC3339))
+	}
+
+	fmt.Printf("Step 1: Checking commit signatures...\n")
+	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, config)
 	if err != nil {
-		fmt.Println("Error checking signatures locally:", err)
+		fmt.Printf("Error checking signatures for %s: %v\n\n", cleanedRepo, err)
 		return
 	}
-	outputs.PrintSignatureResults(results, "Local", config)
+
+	fmt.Printf("Signature verification results:\n")
+	outputs.PrintSignatureResults(results, fmt.Sprintf("Third-party (%s@%s)", cleanedRepo, version), config)
+
+	signedCommits := analysing.GetSignedCommits(results)
+	if len(signedCommits) > 0 {
+		fmt.Printf("\nStep 2: Analysing contributors of %d signed commits...\n", len(signedCommits))
+		analysing.AnalyseSignedCommitContributors(cleanedRepo, signedCommits, token, config)
+	} else {
+		fmt.Printf("\nStep 2: No signed commits found - skipping contributor analysis\n")
+	}
+
+	fmt.Println()
 }
 
 func ParseGo(file string, token string, config checksignature.LocalCheckConfig, timeCutoff *time.Time) error {

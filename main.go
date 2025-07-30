@@ -114,10 +114,11 @@ func main() {
 		AcceptUncertifiedKeys:  acceptUncertifiedKeys,
 		AcceptMissingPublicKey: acceptMissingPublicKey,
 		AcceptGitHubAutomated:  acceptGitHubAutomated,
+		TimeCutoff:             timeCutoff,
 		KeyCreationCutoff:      keyCreationTimeCutoff,
 	}
 
-	results, err := checksignature.CheckSignatureLocal(repo, sha, config, timeCutoff)
+	results, err := checksignature.CheckSignatureLocal(repo, sha, config)
 	if err != nil {
 		fmt.Println("Error checking signatures locally:", err)
 		return

@@ -174,7 +174,7 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config chec
 
 				printResults(depType, pkg, resolved, normalisedRepo, sha, token, config.CommitsToCheck)
 
-				results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config, timeCutOff)
+				results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
 				if err != nil {
 					fmt.Println("Error checking signatures locally:", err)
 					continue

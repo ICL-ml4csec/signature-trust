@@ -3,7 +3,9 @@ package checksignature
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -12,6 +14,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"strings"
@@ -54,6 +57,7 @@ type LocalCheckConfig struct {
 	AcceptUncertifiedKeys  bool
 	AcceptMissingPublicKey bool
 	AcceptGitHubAutomated  bool
+	TimeCutoff             *time.Time
 	KeyCreationCutoff      *time.Time
 }
 
@@ -388,11 +392,158 @@ func verifySSHSignature(raw []byte, config LocalCheckConfig) (SignatureStatus, s
 
 	switch keyType {
 	case "ssh-ed25519":
-		return verifyEd25519SSH(sshSig, content)
-	default:
+		return verifyEd25519SSH(sshSig, content, false)
+	case "sk-ssh-ed25519@openssh.com":
+		return verifyEd25519SSH(sshSig, content, true)
+
+	case "ecdsa-sha2-nistp256":
+		return verifyECDSAP256SSH(sshSig, content, false)
+
+	case "sk-ecdsa-sha2-nistp256@openssh.com":
+		return verifyECDSAP256SSH(sshSig, content, true)
+
+	case "ssh-rsa":
+		return ValidSignatureButNotCertified, "SSH-RSA signatures are not supported for commit signing (deprecated by GitHub for security reasons). Use Ed25519: ssh-keygen -t ed25519", nil
+
+	case "ssh-dss":
+		return InvalidSignature, "SSH-DSS keys are cryptographically broken and not supported", nil
+
+	case "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521":
 		return ValidSignatureButNotCertified,
-			fmt.Sprintf("SSH signature with %s key found but verification not implemented", keyType), nil
+			fmt.Sprintf("ECDSA %s curves not supported. GitHub only supports nistp256 for ECDSA. Consider Ed25519 instead.",
+				strings.TrimPrefix(keyType, "ecdsa-sha2-")), nil
+
+	default:
+		return VerificationError,
+			fmt.Sprintf("Unknown SSH key type: %s", keyType), nil
 	}
+}
+
+func verifyEd25519SSH(sshSig *SSHSignatureData, content string, isSecurityKey bool) (SignatureStatus, string, error) {
+	keyTypeDesc := "Ed25519"
+	if isSecurityKey {
+		keyTypeDesc = "security key Ed25519"
+	}
+
+	publicKey, signature, err := extractEd25519KeyAndSignatureFromSSH(sshSig)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to extract %s data: %v", keyTypeDesc, err), err
+	}
+
+	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
+	}
+
+	valid := ed25519.Verify(publicKey, signedPayload, signature)
+
+	if valid {
+		authorEmail := extractAuthorEmail(content)
+
+		if !isSecurityKey && sshSig.IdentityComment != "" && authorEmail != "" {
+			if sshSig.IdentityComment != authorEmail {
+				return EmailNotMatched,
+					fmt.Sprintf("Valid Ed25519 SSH signature but identity mismatch: signature=%s, author=%s",
+						sshSig.IdentityComment, authorEmail), nil
+			}
+		}
+
+		return ValidSignature, fmt.Sprintf("Valid %s SSH signature for %s", keyTypeDesc, authorEmail), nil
+	}
+
+	return InvalidSignature, fmt.Sprintf("%s SSH signature verification failed", keyTypeDesc), nil
+}
+
+func verifyECDSAP256SSH(sshSig *SSHSignatureData, content string, isSecurityKey bool) (SignatureStatus, string, error) {
+	keyTypeDesc := "ECDSA P-256"
+	if isSecurityKey {
+		keyTypeDesc = "security key ECDSA P-256"
+	}
+
+	publicKey, r, s, err := extractECDSAKeyAndSignatureFromSSH(sshSig)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to extract %s data: %v", keyTypeDesc, err), err
+	}
+
+	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
+	}
+
+	hash := sha256.Sum256(signedPayload)
+	valid := ecdsa.Verify(publicKey, hash[:], r, s)
+
+	if valid {
+		authorEmail := extractAuthorEmail(content)
+		return ValidSignature, fmt.Sprintf("Valid %s SSH signature for %s", keyTypeDesc, authorEmail), nil
+	}
+
+	return InvalidSignature, fmt.Sprintf("%s SSH signature verification failed", keyTypeDesc), nil
+}
+
+func extractECDSAKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (*ecdsa.PublicKey, *big.Int, *big.Int, error) {
+	pubKeyReader := bytes.NewReader(sshSig.PublicKey)
+
+	var keyTypeLen uint32
+	binary.Read(pubKeyReader, binary.BigEndian, &keyTypeLen)
+	pubKeyReader.Seek(int64(keyTypeLen), io.SeekCurrent)
+
+	var curveNameLen uint32
+	binary.Read(pubKeyReader, binary.BigEndian, &curveNameLen)
+	pubKeyReader.Seek(int64(curveNameLen), io.SeekCurrent)
+
+	var pubKeyPointLen uint32
+	if err := binary.Read(pubKeyReader, binary.BigEndian, &pubKeyPointLen); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to read public key point length: %w", err)
+	}
+
+	pubKeyPoint := make([]byte, pubKeyPointLen)
+	if _, err := io.ReadFull(pubKeyReader, pubKeyPoint); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to read public key point: %w", err)
+	}
+
+	if len(pubKeyPoint) != 65 || pubKeyPoint[0] != 0x04 {
+		return nil, nil, nil, fmt.Errorf("invalid ECDSA public key point format")
+	}
+
+	curve := elliptic.P256()
+	x := new(big.Int).SetBytes(pubKeyPoint[1:33])
+	y := new(big.Int).SetBytes(pubKeyPoint[33:65])
+
+	if !curve.IsOnCurve(x, y) {
+		return nil, nil, nil, fmt.Errorf("public key point not on P-256 curve")
+	}
+
+	publicKey := &ecdsa.PublicKey{Curve: curve, X: x, Y: y}
+
+	sigReader := bytes.NewReader(sshSig.Signature)
+
+	var sigTypeLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sigTypeLen)
+	sigReader.Seek(int64(sigTypeLen), io.SeekCurrent)
+
+	var sigLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sigLen)
+
+	signature := make([]byte, sigLen)
+	io.ReadFull(sigReader, signature)
+
+	sigReader = bytes.NewReader(signature)
+
+	var rLen uint32
+	binary.Read(sigReader, binary.BigEndian, &rLen)
+	rBytes := make([]byte, rLen)
+	io.ReadFull(sigReader, rBytes)
+
+	var sLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sLen)
+	sBytes := make([]byte, sLen)
+	io.ReadFull(sigReader, sBytes)
+
+	r := new(big.Int).SetBytes(rBytes)
+	s := new(big.Int).SetBytes(sBytes)
+
+	return publicKey, r, s, nil
 }
 
 func extractSSHSignatureData(raw string) (*SSHSignatureData, error) {
@@ -485,36 +636,6 @@ func getSSHKeyType(publicKeyBlob []byte) (string, error) {
 	return string(keyType), nil
 }
 
-func verifyEd25519SSH(sshSig *SSHSignatureData, content string) (SignatureStatus, string, error) {
-	publicKey, signature, err := extractKeyAndSignatureFromSSH(sshSig)
-	if err != nil {
-		return VerificationError, fmt.Sprintf("Failed to extract Ed25519 data: %v", err), err
-	}
-
-	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
-	if err != nil {
-		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
-	}
-
-	valid := ed25519.Verify(publicKey, signedPayload, signature)
-
-	if valid {
-		authorEmail := extractAuthorEmail(content)
-
-		if sshSig.IdentityComment != "" && authorEmail != "" {
-			if sshSig.IdentityComment != authorEmail {
-				return EmailNotMatched,
-					fmt.Sprintf("Valid Ed25519 SSH signature but identity mismatch: signature=%s, author=%s",
-						sshSig.IdentityComment, authorEmail), nil
-			}
-		}
-
-		return ValidSignature, fmt.Sprintf("Valid Ed25519 SSH signature for %s", authorEmail), nil
-	}
-
-	return InvalidSignature, "Ed25519 SSH signature verification failed", nil
-}
-
 func computeSSHFingerprint(pubKeyBlob []byte) (string, error) {
 	reader := bytes.NewReader(pubKeyBlob)
 
@@ -571,16 +692,27 @@ func checkSSHKeyAge(pubKeyBlob []byte, token string, cutoff *time.Time) (bool, *
 		}
 	}
 
-	localDates, err := loadLocalKeyDates("local_ssh_key_dates.json")
+	databasePath := "local_ssh_key_dates.json"
+	needsUpdate := true
+
+	if stat, err := os.Stat(databasePath); err == nil {
+		maxAge := 1 * time.Hour
+		if time.Since(stat.ModTime()) < maxAge {
+			needsUpdate = false
+		}
+	}
+
+	if needsUpdate {
+		fmt.Printf("SSH key database is old, regenerating...")
+		os.Remove(databasePath)
+		if err := generateSSHKeyDatabase(); err != nil {
+			return false, nil, fmt.Errorf("failed to generate SSH key database: %v", err)
+		}
+	}
+
+	localDates, err := loadLocalKeyDates(databasePath)
 	if err != nil {
-		fmt.Printf("Local SSH key database not found, generating it...\n")
-		if genErr := generateSSHKeyDatabase(); genErr != nil {
-			return false, nil, fmt.Errorf("failed to generate SSH key database: %v", genErr)
-		}
-		localDates, err = loadLocalKeyDates("local_ssh_key_dates.json")
-		if err != nil {
-			return false, nil, fmt.Errorf("could not load generated key database: %v", err)
-		}
+		return false, nil, fmt.Errorf("could not load key database: %v", err)
 	}
 
 	if createdAt, ok := localDates[fingerprint]; ok {
@@ -620,7 +752,7 @@ func loadLocalKeyDates(path string) (map[string]time.Time, error) {
 	return result, nil
 }
 
-func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
+func extractEd25519KeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
 	pubKeyReader := bytes.NewReader(sshSig.PublicKey)
 
 	var keyTypeLen uint32
@@ -633,8 +765,10 @@ func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey,
 		return nil, nil, fmt.Errorf("failed to read key type: %w", err)
 	}
 
-	if string(keyType) != "ssh-ed25519" {
-		return nil, nil, fmt.Errorf("only Ed25519 keys supported, got: %s", string(keyType))
+	keyTypeStr := string(keyType)
+
+	if keyTypeStr != "ssh-ed25519" && keyTypeStr != "sk-ssh-ed25519@openssh.com" {
+		return nil, nil, fmt.Errorf("only Ed25519 keys supported, got: %s", keyTypeStr)
 	}
 
 	var pubKeyLen uint32
@@ -663,8 +797,9 @@ func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey,
 		return nil, nil, fmt.Errorf("failed to read signature type: %w", err)
 	}
 
-	if string(sigType) != "ssh-ed25519" {
-		return nil, nil, fmt.Errorf("signature type mismatch: %s", string(sigType))
+	sigTypeStr := string(sigType)
+	if sigTypeStr != "ssh-ed25519" && sigTypeStr != "sk-ssh-ed25519@openssh.com" {
+		return nil, nil, fmt.Errorf("signature type mismatch: %s", sigTypeStr)
 	}
 
 	var sigLen uint32
@@ -731,8 +866,10 @@ func computeSSHSignedPayload(content, namespace, hashAlgorithm string) ([]byte, 
 func removeSSHSignatureFromCommit(raw string) string {
 	var b strings.Builder
 	inSig := false
+	lineCount := 0
 
 	for _, line := range strings.Split(raw, "\n") {
+		lineCount++
 		switch {
 		case strings.HasPrefix(line, "gpgsig "):
 			inSig = true
@@ -750,10 +887,13 @@ func removeSSHSignatureFromCommit(raw string) string {
 	if b.Len() == 0 || b.String()[b.Len()-1] != '\n' {
 		b.WriteByte('\n')
 	}
-	return b.String()
+
+	result := b.String()
+
+	return result
 }
 
-func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig, timeCutoff *time.Time) ([]SignatureCheckResult, error) {
+func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]SignatureCheckResult, error) {
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
 	tmpDir, err := os.MkdirTemp("", "repo-")
 	if err != nil {
@@ -773,8 +913,8 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig, timeCuto
 	}
 
 	var revArgs []string
-	if timeCutoff != nil {
-		cutoffSHA, err := trustpolicies.GetSHAFromTime(tmpDir, branchToUse, *timeCutoff)
+	if config.TimeCutoff != nil {
+		cutoffSHA, err := trustpolicies.GetSHAFromTime(tmpDir, branchToUse, *config.TimeCutoff)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get SHA from time: %v", err)
 		}
@@ -782,7 +922,7 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig, timeCuto
 			revArgs = []string{"git", "rev-list", "origin/" + branchToUse, "^" + cutoffSHA}
 		} else {
 			fmt.Printf("No commits older than %s on branch %s, checking all commits\n",
-				timeCutoff.Format(time.RFC3339), branchToUse)
+				config.TimeCutoff.Format(time.RFC3339), branchToUse)
 			revArgs = []string{"git", "rev-list", "origin/" + branchToUse}
 		}
 	} else if config.OldestSHA != "" {

@@ -11,7 +11,7 @@ func DoGet(url string, token string) (*http.Response, error) {
 	}
 
 	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Authorisation", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
