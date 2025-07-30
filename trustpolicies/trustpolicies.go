@@ -3,14 +3,36 @@ package trustpolicies
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 )
 
-func KeyCreationTime(keyID string) (int64, error) { // WIP
-	return 0, nil
+func GetPGPKeyCreationTime(keyID string) (time.Time, error) {
+	cmd := exec.Command("gpg", "--with-colons", "--list-keys", keyID)
+	output, err := cmd.Output()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to list key %s: %v", keyID, err)
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "pub:") {
+			fields := strings.Split(line, ":")
+			if len(fields) > 5 {
+				epochStr := fields[5]
+				epoch, err := strconv.ParseInt(epochStr, 10, 64)
+				if err != nil {
+					return time.Time{}, fmt.Errorf("invalid epoch in key info: %v", err)
+				}
+				return time.Unix(epoch, 0), nil
+			}
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("creation time not found for key %s", keyID)
 }
 
 func GetSHAFromTime(repoDir, branch string, cutoff time.Time) (string, error) {

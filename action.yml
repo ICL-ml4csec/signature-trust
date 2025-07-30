@@ -38,6 +38,10 @@ inputs:
     description: "Lookback duration for time-based checking (e.g. '4320h' for 180 days). Leave empty for commit-count based checking."
     required: false
     default: ""
+  key-creation-cutoff:
+    description: "Check PGP key creation time."
+    required: false
+    default: 730h
 
 
 runs:
@@ -54,3 +58,4 @@ runs:
     - ${{ inputs.accept-missing-public-key }}
     - ${{ inputs.accept-github-automated }}
     - ${{ inputs.lookback }}
+    - ${{ inputs.key-creation-cutoff }}

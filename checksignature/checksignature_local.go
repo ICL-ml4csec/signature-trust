@@ -8,6 +8,7 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
@@ -43,6 +45,7 @@ type SignatureCheckResult struct {
 
 type LocalCheckConfig struct {
 	Branch                 string
+	Token                  string
 	CommitsToCheck         int
 	OldestSHA              string
 	AcceptExpiredKeys      bool
@@ -51,6 +54,7 @@ type LocalCheckConfig struct {
 	AcceptUncertifiedKeys  bool
 	AcceptMissingPublicKey bool
 	AcceptGitHubAutomated  bool
+	KeyCreationCutoff      *time.Time
 }
 
 type SSHSignatureData struct {
@@ -61,6 +65,13 @@ type SSHSignatureData struct {
 	PublicKey        []byte
 	Signature        []byte
 	IdentityComment  string
+}
+
+type GitHubKey struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	CreatedAt   time.Time `json:"created_at"`
+	Fingerprint string    `json:"fingerprint"`
 }
 
 func extractEmailsFromSignatureOutput(output string) (signerEmail string, authorEmail string) {
@@ -161,7 +172,7 @@ func classifySignature(output string) SignatureStatus {
 }
 
 // PGP signature verification
-func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
+func verifyPGPSignature(raw []byte, config LocalCheckConfig) (SignatureStatus, string, error) {
 	content := string(raw)
 
 	if !strings.Contains(content, "gpgsig -----BEGIN PGP SIGNATURE-----") {
@@ -201,6 +212,15 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 
 	signature := strings.Join(sigLines, "\n")
 	publicKey, keyID, err := extractPGPPublicKeyFromSignature(signature)
+
+	if keyID != "" {
+		createdAt, err := trustpolicies.GetPGPKeyCreationTime(keyID)
+		if err == nil {
+			if config.KeyCreationCutoff != nil && createdAt.After(*config.KeyCreationCutoff) {
+				return InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", keyID, createdAt.Format(time.RFC3339)), nil
+			}
+		}
+	}
 
 	var keyImported bool
 	if err == nil && publicKey != "" {
@@ -334,7 +354,7 @@ func importPGPKeyDirectly(publicKey string) error {
 }
 
 // SSH signature verification
-func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
+func verifySSHSignature(raw []byte, config LocalCheckConfig) (SignatureStatus, string, error) {
 	content := string(raw)
 
 	if !strings.Contains(content, "gpgsig -----BEGIN SSH SIGNATURE-----") {
@@ -344,6 +364,17 @@ func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
 	sshSig, err := extractSSHSignatureData(content)
 	if err != nil {
 		return VerificationError, fmt.Sprintf("Failed to parse SSH signature: %v", err), err
+	}
+
+	if config.KeyCreationCutoff != nil && config.Token != "" {
+		ok, createdAt, err := checkSSHKeyAge(sshSig.PublicKey, config.Token, config.KeyCreationCutoff)
+		if err == nil && !ok {
+			fingerprint, fpErr := computeSSHFingerprint(sshSig.PublicKey)
+			if fpErr != nil {
+				fingerprint = "unknown"
+			}
+			return InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", fingerprint, createdAt.Format(time.RFC3339)), nil
+		}
 	}
 
 	keyType, err := getSSHKeyType(sshSig.PublicKey)
@@ -482,6 +513,111 @@ func verifyEd25519SSH(sshSig *SSHSignatureData, content string) (SignatureStatus
 	}
 
 	return InvalidSignature, "Ed25519 SSH signature verification failed", nil
+}
+
+func computeSSHFingerprint(pubKeyBlob []byte) (string, error) {
+	reader := bytes.NewReader(pubKeyBlob)
+
+	var keyTypeLen uint32
+	if err := binary.Read(reader, binary.BigEndian, &keyTypeLen); err != nil {
+		return "", err
+	}
+
+	keyType := make([]byte, keyTypeLen)
+	if _, err := io.ReadFull(reader, keyType); err != nil {
+		return "", err
+	}
+
+	h := sha256.Sum256(pubKeyBlob)
+	fp := base64.StdEncoding.EncodeToString(h[:])
+
+	return fmt.Sprintf("SHA256:%s", strings.TrimRight(fp, "=")), nil
+}
+
+func fetchGitHubSigningKeys(token string) ([]GitHubKey, error) {
+	resp, err := client.DoGet("https://api.github.com/user/ssh_signing_keys", token)
+	if err != nil {
+		fmt.Printf("Error fetching commits: %v\n", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("GitHub API failed with status %d", resp.StatusCode)
+	}
+
+	var keys []GitHubKey
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+func checkSSHKeyAge(pubKeyBlob []byte, token string, cutoff *time.Time) (bool, *time.Time, error) {
+	fingerprint, err := computeSSHFingerprint(pubKeyBlob)
+	if err != nil {
+		return false, nil, err
+	}
+
+	keys, err := fetchGitHubSigningKeys(token)
+	if err == nil {
+		for _, key := range keys {
+			if key.Fingerprint == fingerprint {
+				if cutoff != nil && key.CreatedAt.After(*cutoff) {
+					return false, &key.CreatedAt, nil
+				}
+				return true, &key.CreatedAt, nil
+			}
+		}
+	}
+
+	localDates, err := loadLocalKeyDates("local_ssh_key_dates.json")
+	if err != nil {
+		fmt.Printf("Local SSH key database not found, generating it...\n")
+		if genErr := generateSSHKeyDatabase(); genErr != nil {
+			return false, nil, fmt.Errorf("failed to generate SSH key database: %v", genErr)
+		}
+		localDates, err = loadLocalKeyDates("local_ssh_key_dates.json")
+		if err != nil {
+			return false, nil, fmt.Errorf("could not load generated key database: %v", err)
+		}
+	}
+
+	if createdAt, ok := localDates[fingerprint]; ok {
+		if cutoff != nil && createdAt.After(*cutoff) {
+			return false, &createdAt, nil
+		}
+		return true, &createdAt, nil
+	}
+
+	return false, nil, fmt.Errorf("key fingerprint not found in GitHub or local database")
+}
+
+func loadLocalKeyDates(path string) (map[string]time.Time, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var raw map[string]string
+	if err := json.NewDecoder(f).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]time.Time)
+	for k, v := range raw {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04:05", v)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing time for key %s (value: %s): %v", k, v, err)
+			}
+			t = t.UTC()
+		}
+		result[k] = t
+	}
+	return result, nil
 }
 
 func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
@@ -694,17 +830,18 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig, timeCuto
 			continue
 		}
 
-		status, output, err := verifyPGPSignature(catOut)
+		hasSSH := strings.Contains(string(catOut), "BEGIN SSH SIGNATURE")
 
-		if status == UnsignedCommit || status == MissingPublicKey {
+		status, output, err := verifyPGPSignature(catOut, config)
 
-			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut)
+		if hasSSH {
+			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut, config)
 
 			if sshStatus == ValidSignature {
 				status = sshStatus
 				output = sshOutput
 				err = sshErr
-			} else if sshStatus != UnsignedCommit {
+			} else if status == UnsignedCommit || status == MissingPublicKey {
 				status = sshStatus
 				output = sshOutput
 				err = sshErr

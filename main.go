@@ -15,8 +15,8 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 11 {
-		fmt.Printf("Usage: <repository> <branch> <token> <commits|lookback> <expired> <untrusted> <uncertified> <missingkey> <github-automated> <lookback-duration-or-empty>\n")
+	if len(os.Args) < 12 {
+		fmt.Printf("Usage: <repository> <branch> <token> <commits|lookback> <expired> <untrusted> <uncertified> <missingkey> <github-automated> <lookback-duration-or-empty> <key-creation-cutoff>\n")
 		fmt.Printf("Examples:\n")
 		fmt.Printf("  Check last 10 commits: ... 10 ... \"\"\n")
 		fmt.Printf("  Check last 6 months:   ... all ... \"4320h\"\n")
@@ -90,12 +90,23 @@ func main() {
 		timeCutoff = &since
 	}
 
+	var keyCreationTimeCutoff *time.Time
+	if len(os.Args) > 11 && os.Args[11] != "" {
+		keyCutoffDur, err := time.ParseDuration(os.Args[11])
+		if err != nil {
+			log.Fatalf("invalid key creation cutoff duration: %v", err)
+		}
+		cutoff := time.Now().Add(-keyCutoffDur)
+		keyCreationTimeCutoff = &cutoff
+	}
+
 	// fmt.Printf("Checking commits for repository: %s on branch: %s\n", repo, branch)
 	// checksignature.CheckSignature(repo, branch, token, commitsToCheck)
 
 	fmt.Printf("Checking commits locally for repository: %s on branch: %s\n", repo, branch)
 	config := checksignature.LocalCheckConfig{
 		Branch:                 branch,
+		Token:                  token,
 		CommitsToCheck:         commitsToCheck,
 		OldestSHA:              oldestSHA,
 		AcceptExpiredKeys:      acceptExpiredKeys,
@@ -103,6 +114,7 @@ func main() {
 		AcceptUncertifiedKeys:  acceptUncertifiedKeys,
 		AcceptMissingPublicKey: acceptMissingPublicKey,
 		AcceptGitHubAutomated:  acceptGitHubAutomated,
+		KeyCreationCutoff:      keyCreationTimeCutoff,
 	}
 
 	results, err := checksignature.CheckSignatureLocal(repo, sha, config, timeCutoff)
