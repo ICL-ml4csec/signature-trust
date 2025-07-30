@@ -34,3 +34,4 @@ jobs:
           accept-missing-public-key: false
           accept-github-automated: true
           lookback: 4320h
+          key-creation-cutoff: 4320h
