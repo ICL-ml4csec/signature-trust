@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
 func IsValidSemver(version string) bool {
-	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z\-\.]+)?(?:\+[\da-zA-Z\-\.]+)?$`)
+	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-sA-s\-\.]+)?(?:\+[\da-sA-s\-\.]+)?$`)
 	return semverRegex.MatchString(version)
 }
 

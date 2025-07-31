@@ -6,10 +6,12 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
-	"github.com/ICL-ml4sec/msc-hmj24/checksignature"
-	"github.com/ICL-ml4sec/msc-hmj24/checkthirdparties/helpers"
-	"github.com/ICL-ml4sec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/outputs"
 )
 
 type PackageJSON struct {
@@ -40,7 +42,7 @@ func printResults(depType, pkg, version, repo, sha, token string, commitsToCheck
 	checksignature.CheckSignature(repo, sha, token, commitsToCheck)
 }
 
-func ParsePackageJSON(file string, token string, commitsToCheck int) error {
+func ParsePackageJSON(file string, token string, commitsToCheck int, config checksignature.LocalCheckConfig, timeCutOff *time.Time) error {
 	var packageJSON PackageJSON
 
 	data, err := os.ReadFile(file)
@@ -170,14 +172,14 @@ func ParsePackageJSON(file string, token string, commitsToCheck int) error {
 					continue
 				}
 
-				printResults(depType, pkg, resolved, normalisedRepo, sha, token, commitsToCheck)
+				printResults(depType, pkg, resolved, normalisedRepo, sha, token, config.CommitsToCheck)
 
-				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
-				// if err != nil {
-				// 	fmt.Println("Error checking signatures locally:", err)
-				// 	continue
-				// }
-				// helpers.PrintSignatureResults(results, "Local")
+				results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
+				if err != nil {
+					fmt.Println("Error checking signatures locally:", err)
+					continue
+				}
+				outputs.PrintSignatureResults(results, "Local", config)
 
 			}
 		}

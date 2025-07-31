@@ -3,32 +3,41 @@ package checksignature
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
 type SignatureStatus string
 
 const (
-	ValidSignature                SignatureStatus = "valid"
-	ExpiredButValidSignature      SignatureStatus = "valid-but-expired-key"
-	InvalidSignature              SignatureStatus = "invalid"
-	MissingPublicKey              SignatureStatus = "signed-but-missing-key"
-	ValidSignatureButNotCertified SignatureStatus = "valid-but-not-certified"
-	UnsignedCommit                SignatureStatus = "unsigned"
-	VerificationError             SignatureStatus = "error"
-	EmailNotMatched               SignatureStatus = "signed-but-untrusted-email"
-	GitHubAutomatedSignature      SignatureStatus = "github-automated-signature"
+	ValidSignature                 SignatureStatus = "valid"
+	ExpiredButValidSignature       SignatureStatus = "valid-but-expired-key"
+	InvalidSignature               SignatureStatus = "invalid"
+	MissingPublicKey               SignatureStatus = "signed-but-missing-key"
+	ValidSignatureButNotCertified  SignatureStatus = "valid-but-not-certified"
+	ValidSignatureButNotAuthorized SignatureStatus = "valid-but-not-authorized"
+	UnsignedCommit                 SignatureStatus = "unsigned"
+	VerificationError              SignatureStatus = "error"
+	EmailNotMatched                SignatureStatus = "signed-but-untrusted-email"
+	GitHubAutomatedSignature       SignatureStatus = "github-automated-signature"
 )
 
 type SignatureCheckResult struct {
@@ -39,13 +48,49 @@ type SignatureCheckResult struct {
 }
 
 type LocalCheckConfig struct {
-	CommitsToCheck         int
-	AcceptExpiredKeys      bool
-	AcceptUnsignedCommits  bool
-	AcceptUntrustedSigners bool
-	AcceptUncertifiedKeys  bool
-	AcceptMissingPublicKey bool
-	AcceptGitHubAutomated  bool
+	Branch                       string
+	Token                        string
+	Repo                         string
+	CommitsToCheck               int
+	OldestSHA                    string
+	AcceptExpiredKeys            bool
+	AcceptUnsignedCommits        bool
+	AcceptUntrustedSigners       bool
+	AcceptUncertifiedKeys        bool
+	AcceptMissingPublicKey       bool
+	AcceptGitHubAutomated        bool
+	AcceptUnauthorizedSignatures bool
+	TimeCutoff                   *time.Time
+	KeyCreationCutoff            *time.Time
+}
+
+type GitHubGPGKey struct {
+	ID           int         `json:"id"`
+	PrimaryKeyID interface{} `json:"primary_key_id"`
+	KeyID        string      `json:"key_id"`
+	PublicKey    string      `json:"public_key"`
+	Emails       []struct {
+		Email    string `json:"email"`
+		Verified bool   `json:"verified"`
+	} `json:"emails"`
+	Subkeys []struct {
+		ID                int         `json:"id"`
+		PrimaryKeyID      interface{} `json:"primary_key_id"`
+		KeyID             string      `json:"key_id"`
+		PublicKey         string      `json:"public_key"`
+		CanSign           bool        `json:"can_sign"`
+		CanEncryptComms   bool        `json:"can_encrypt_comms"`
+		CanEncryptStorage bool        `json:"can_encrypt_storage"`
+		CanCertify        bool        `json:"can_certify"`
+		CreatedAt         time.Time   `json:"created_at"`
+		ExpiresAt         *time.Time  `json:"expires_at"`
+	} `json:"subkeys"`
+	CanSign           bool       `json:"can_sign"`
+	CanEncryptComms   bool       `json:"can_encrypt_comms"`
+	CanEncryptStorage bool       `json:"can_encrypt_storage"`
+	CanCertify        bool       `json:"can_certify"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ExpiresAt         *time.Time `json:"expires_at"`
 }
 
 type SSHSignatureData struct {
@@ -56,6 +101,13 @@ type SSHSignatureData struct {
 	PublicKey        []byte
 	Signature        []byte
 	IdentityComment  string
+}
+
+type GitHubKey struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	CreatedAt   time.Time `json:"created_at"`
+	Fingerprint string    `json:"fingerprint"`
 }
 
 func extractEmailsFromSignatureOutput(output string) (signerEmail string, authorEmail string) {
@@ -156,7 +208,7 @@ func classifySignature(output string) SignatureStatus {
 }
 
 // PGP signature verification
-func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
+func verifyPGPSignature(raw []byte, sha string, config LocalCheckConfig) (SignatureStatus, string, error) {
 	content := string(raw)
 
 	if !strings.Contains(content, "gpgsig -----BEGIN PGP SIGNATURE-----") {
@@ -164,7 +216,6 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 	}
 
 	lines := strings.Split(content, "\n")
-
 	sigStart := -1
 	sigEnd := -1
 
@@ -196,6 +247,15 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 
 	signature := strings.Join(sigLines, "\n")
 	publicKey, keyID, err := extractPGPPublicKeyFromSignature(signature)
+
+	if keyID != "" {
+		createdAt, err := trustpolicies.GetPGPKeyCreationTime(keyID)
+		if err == nil {
+			if config.KeyCreationCutoff != nil && createdAt.After(*config.KeyCreationCutoff) {
+				return InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", keyID, createdAt.Format(time.RFC3339)), nil
+			}
+		}
+	}
 
 	var keyImported bool
 	if err == nil && publicKey != "" {
@@ -255,6 +315,16 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 		if checkEmailMismatch(raw, signerEmail) {
 			return EmailNotMatched, string(output), err
 		}
+
+		if config.Token != "" && config.Repo != "" && sha != "" {
+			authorized, authErr := checkGPGKeyAuthorization(keyID, config.Repo, sha, config.Token)
+			if authErr != nil {
+				fmt.Printf("Warning: Could not verify GPG key authorization: %v\n", authErr)
+			} else if !authorized {
+				return ValidSignatureButNotAuthorized,
+					fmt.Sprintf("Valid GPG signature with key %s, but key is not registered on the commit author's GitHub account", keyID), err
+			}
+		}
 	}
 
 	if status == MissingPublicKey && keyImported {
@@ -262,6 +332,92 @@ func verifyPGPSignature(raw []byte) (SignatureStatus, string, error) {
 	}
 
 	return status, string(output), err
+}
+
+func interfaceToString(val interface{}) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%.0f", v)
+	case int:
+		return fmt.Sprintf("%d", v)
+	case int64:
+		return fmt.Sprintf("%d", v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func checkGPGKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
+	if token == "" {
+		return true, fmt.Errorf("no GitHub token provided, skipping GPG key authorization")
+	}
+
+	username, err := GetCommitContributor(repo, commitSHA, token)
+	if err != nil {
+		return false, fmt.Errorf("failed to get commit contributor: %v", err)
+	}
+
+	gpgKeys, err := GetUserGPGKeys(username, token)
+	if err != nil {
+		return false, fmt.Errorf("failed to get user GPG keys: %v", err)
+	}
+
+	for _, key := range gpgKeys {
+		primaryKeyID := interfaceToString(key.PrimaryKeyID)
+		if normalizeKeyID(key.KeyID) == normalizeKeyID(keyID) ||
+			normalizeKeyID(primaryKeyID) == normalizeKeyID(keyID) {
+			return true, nil
+		}
+
+		for _, subkey := range key.Subkeys {
+			subkeyPrimaryID := interfaceToString(subkey.PrimaryKeyID)
+			if subkey.CanSign && (normalizeKeyID(subkey.KeyID) == normalizeKeyID(keyID) ||
+				normalizeKeyID(subkeyPrimaryID) == normalizeKeyID(keyID)) {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func GetUserGPGKeys(username, token string) ([]GitHubGPGKey, error) {
+	url := fmt.Sprintf("https://api.github.com/users/%s/gpg_keys", username)
+
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 {
+		return []GitHubGPGKey{}, nil
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var keys []GitHubGPGKey
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+		return nil, err
+	}
+
+	return keys, nil
+}
+
+func normalizeKeyID(keyID string) string {
+	keyID = strings.TrimPrefix(keyID, "0x")
+	keyID = strings.TrimPrefix(keyID, "0X")
+	keyID = strings.ToUpper(keyID)
+
+	if len(keyID) > 16 {
+		keyID = keyID[len(keyID)-16:]
+	}
+
+	return keyID
 }
 
 func extractPGPPublicKeyFromSignature(signature string) (publicKey string, keyID string, err error) {
@@ -329,7 +485,7 @@ func importPGPKeyDirectly(publicKey string) error {
 }
 
 // SSH signature verification
-func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
+func verifySSHSignature(raw []byte, sha string, config LocalCheckConfig) (SignatureStatus, string, error) {
 	content := string(raw)
 
 	if !strings.Contains(content, "gpgsig -----BEGIN SSH SIGNATURE-----") {
@@ -341,6 +497,24 @@ func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
 		return VerificationError, fmt.Sprintf("Failed to parse SSH signature: %v", err), err
 	}
 
+	if config.KeyCreationCutoff != nil && config.Token != "" {
+		ok, createdAt, err := checkSSHKeyAge(sshSig.PublicKey, config.Repo, sha, config.Token, config.KeyCreationCutoff)
+		if err != nil {
+			fingerprint, fpErr := computeSSHFingerprint(sshSig.PublicKey)
+			if fpErr != nil {
+				fingerprint = "unknown"
+			}
+			return MissingPublicKey, fmt.Sprintf("SSH signing key %s not found in GitHub account: %v", fingerprint, err), nil
+		}
+		if !ok {
+			fingerprint, fpErr := computeSSHFingerprint(sshSig.PublicKey)
+			if fpErr != nil {
+				fingerprint = "unknown"
+			}
+			return InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", fingerprint, createdAt.Format(time.RFC3339)), nil
+		}
+	}
+
 	keyType, err := getSSHKeyType(sshSig.PublicKey)
 	if err != nil {
 		return VerificationError, fmt.Sprintf("Failed to determine key type: %v", err), err
@@ -350,13 +524,161 @@ func verifySSHSignature(raw []byte) (SignatureStatus, string, error) {
 		return GitHubAutomatedSignature, "GitHub automated SSH signature detected", nil
 	}
 
+	var status SignatureStatus
+	var output string
 	switch keyType {
 	case "ssh-ed25519":
-		return verifyEd25519SSH(sshSig, content)
-	default:
+		status, output, err = verifyEd25519SSH(sshSig, content, false)
+	case "sk-ssh-ed25519@openssh.com":
+		status, output, err = verifyEd25519SSH(sshSig, content, true)
+	case "ecdsa-sha2-nistp256":
+		status, output, err = verifyECDSAP256SSH(sshSig, content, false)
+	case "sk-ecdsa-sha2-nistp256@openssh.com":
+		status, output, err = verifyECDSAP256SSH(sshSig, content, true)
+	case "ssh-rsa":
+		return ValidSignatureButNotCertified, "SSH-RSA signatures are not supported for commit signing (deprecated by GitHub for security reasons). Use Ed25519: ssh-keygen -t ed25519", nil
+	case "ssh-dss":
+		return InvalidSignature, "SSH-DSS keys are cryptographically broken and not supported", nil
+	case "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521":
 		return ValidSignatureButNotCertified,
-			fmt.Sprintf("SSH signature with %s key found but verification not implemented", keyType), nil
+			fmt.Sprintf("ECDSA %s curves not supported. GitHub only supports nistp256 for ECDSA. Consider Ed25519 instead.",
+				strings.TrimPrefix(keyType, "ecdsa-sha2-")), nil
+	default:
+		return VerificationError, fmt.Sprintf("Unknown SSH key type: %s", keyType), nil
 	}
+
+	if status == ValidSignature {
+		signerIdentity := sshSig.IdentityComment
+
+		isSecurityKey := strings.Contains(keyType, "sk-")
+
+		if !isSecurityKey && signerIdentity != "" {
+			if checkEmailMismatch(raw, signerIdentity) {
+				return EmailNotMatched, fmt.Sprintf("SSH signature identity mismatch: signature=%s, commit author=%s",
+					signerIdentity, extractAuthorEmail(content)), err
+			}
+		}
+	}
+
+	return status, output, err
+}
+
+func verifyEd25519SSH(sshSig *SSHSignatureData, content string, isSecurityKey bool) (SignatureStatus, string, error) {
+	keyTypeDesc := "Ed25519"
+	if isSecurityKey {
+		keyTypeDesc = "security key Ed25519"
+	}
+
+	publicKey, signature, err := extractEd25519KeyAndSignatureFromSSH(sshSig)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to extract %s data: %v", keyTypeDesc, err), err
+	}
+
+	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
+	}
+
+	valid := ed25519.Verify(publicKey, signedPayload, signature)
+
+	if valid {
+		authorEmail := extractAuthorEmail(content)
+		return ValidSignature, fmt.Sprintf("Valid %s SSH signature for %s", keyTypeDesc, authorEmail), nil
+	}
+
+	return InvalidSignature, fmt.Sprintf("%s SSH signature verification failed", keyTypeDesc), nil
+}
+
+func verifyECDSAP256SSH(sshSig *SSHSignatureData, content string, isSecurityKey bool) (SignatureStatus, string, error) {
+	keyTypeDesc := "ECDSA P-256"
+	if isSecurityKey {
+		keyTypeDesc = "security key ECDSA P-256"
+	}
+
+	publicKey, r, s, err := extractECDSAKeyAndSignatureFromSSH(sshSig)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to extract %s data: %v", keyTypeDesc, err), err
+	}
+
+	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
+	if err != nil {
+		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
+	}
+
+	hash := sha256.Sum256(signedPayload)
+	valid := ecdsa.Verify(publicKey, hash[:], r, s)
+
+	if valid {
+		authorEmail := extractAuthorEmail(content)
+		return ValidSignature, fmt.Sprintf("Valid %s SSH signature for %s", keyTypeDesc, authorEmail), nil
+	}
+
+	return InvalidSignature, fmt.Sprintf("%s SSH signature verification failed", keyTypeDesc), nil
+}
+
+func extractECDSAKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (*ecdsa.PublicKey, *big.Int, *big.Int, error) {
+	pubKeyReader := bytes.NewReader(sshSig.PublicKey)
+
+	var keyTypeLen uint32
+	binary.Read(pubKeyReader, binary.BigEndian, &keyTypeLen)
+	pubKeyReader.Seek(int64(keyTypeLen), io.SeekCurrent)
+
+	var curveNameLen uint32
+	binary.Read(pubKeyReader, binary.BigEndian, &curveNameLen)
+	pubKeyReader.Seek(int64(curveNameLen), io.SeekCurrent)
+
+	var pubKeyPointLen uint32
+	if err := binary.Read(pubKeyReader, binary.BigEndian, &pubKeyPointLen); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to read public key point length: %w", err)
+	}
+
+	pubKeyPoint := make([]byte, pubKeyPointLen)
+	if _, err := io.ReadFull(pubKeyReader, pubKeyPoint); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to read public key point: %w", err)
+	}
+
+	if len(pubKeyPoint) != 65 || pubKeyPoint[0] != 0x04 {
+		return nil, nil, nil, fmt.Errorf("invalid ECDSA public key point format")
+	}
+
+	curve := elliptic.P256()
+	x := new(big.Int).SetBytes(pubKeyPoint[1:33])
+	y := new(big.Int).SetBytes(pubKeyPoint[33:65])
+
+	if !curve.IsOnCurve(x, y) {
+		return nil, nil, nil, fmt.Errorf("public key point not on P-256 curve")
+	}
+
+	publicKey := &ecdsa.PublicKey{Curve: curve, X: x, Y: y}
+
+	sigReader := bytes.NewReader(sshSig.Signature)
+
+	var sigTypeLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sigTypeLen)
+	sigReader.Seek(int64(sigTypeLen), io.SeekCurrent)
+
+	var sigLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sigLen)
+
+	signature := make([]byte, sigLen)
+	io.ReadFull(sigReader, signature)
+
+	sigReader = bytes.NewReader(signature)
+
+	var rLen uint32
+	binary.Read(sigReader, binary.BigEndian, &rLen)
+	rBytes := make([]byte, rLen)
+	io.ReadFull(sigReader, rBytes)
+
+	var sLen uint32
+	binary.Read(sigReader, binary.BigEndian, &sLen)
+	sBytes := make([]byte, sLen)
+	io.ReadFull(sigReader, sBytes)
+
+	r := new(big.Int).SetBytes(rBytes)
+	s := new(big.Int).SetBytes(sBytes)
+
+	return publicKey, r, s, nil
 }
 
 func extractSSHSignatureData(raw string) (*SSHSignatureData, error) {
@@ -449,37 +771,155 @@ func getSSHKeyType(publicKeyBlob []byte) (string, error) {
 	return string(keyType), nil
 }
 
-func verifyEd25519SSH(sshSig *SSHSignatureData, content string) (SignatureStatus, string, error) {
-	publicKey, signature, err := extractKeyAndSignatureFromSSH(sshSig)
-	if err != nil {
-		return VerificationError, fmt.Sprintf("Failed to extract Ed25519 data: %v", err), err
+func computeSSHFingerprint(pubKeyBlob []byte) (string, error) {
+	reader := bytes.NewReader(pubKeyBlob)
+
+	var keyTypeLen uint32
+	if err := binary.Read(reader, binary.BigEndian, &keyTypeLen); err != nil {
+		return "", err
 	}
 
-	signedPayload, err := computeSSHSignedPayload(content, sshSig.Namespace, sshSig.HashAlgorithm)
-	if err != nil {
-		return VerificationError, fmt.Sprintf("Failed to compute payload: %v", err), err
+	keyType := make([]byte, keyTypeLen)
+	if _, err := io.ReadFull(reader, keyType); err != nil {
+		return "", err
 	}
 
-	valid := ed25519.Verify(publicKey, signedPayload, signature)
+	h := sha256.Sum256(pubKeyBlob)
+	fp := base64.StdEncoding.EncodeToString(h[:])
 
-	if valid {
-		authorEmail := extractAuthorEmail(content)
-
-		if sshSig.IdentityComment != "" && authorEmail != "" {
-			if sshSig.IdentityComment != authorEmail {
-				return EmailNotMatched,
-					fmt.Sprintf("Valid Ed25519 SSH signature but identity mismatch: signature=%s, author=%s",
-						sshSig.IdentityComment, authorEmail), nil
-			}
-		}
-
-		return ValidSignature, fmt.Sprintf("Valid Ed25519 SSH signature for %s", authorEmail), nil
-	}
-
-	return InvalidSignature, "Ed25519 SSH signature verification failed", nil
+	return fmt.Sprintf("SHA256:%s", strings.TrimRight(fp, "=")), nil
 }
 
-func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
+type KeyAnalysisResult struct {
+	Username        string
+	KeyCount        int
+	RecentKeys      []GitHubUserKey
+	OldKeys         []GitHubUserKey
+	TotalSuspicious int
+}
+
+type GitHubUserKey struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	CreatedAt   time.Time `json:"created_at"`
+	Fingerprint string    `json:"fingerprint"`
+	Title       string    `json:"title"`
+}
+
+func checkSSHKeyAge(pubKeyBlob []byte, repo, commitSHA, token string, cutoff *time.Time) (bool, *time.Time, error) {
+	fingerprint, err := computeSSHFingerprint(pubKeyBlob)
+	if err != nil {
+		return false, nil, err
+	}
+
+	username, err := GetCommitContributor(repo, commitSHA, token)
+	if err != nil {
+		return false, nil, err
+	}
+
+	keys, err := GetUserSSHSigningKeys(username, token)
+	if err != nil {
+		return false, nil, err
+	}
+
+	for _, key := range keys {
+		if key.Fingerprint == fingerprint {
+			if cutoff != nil && key.CreatedAt.After(*cutoff) {
+				return false, &key.CreatedAt, nil
+			}
+			return true, &key.CreatedAt, nil
+		}
+	}
+
+	return false, nil, fmt.Errorf("key fingerprint not found in GitHub or local database")
+}
+
+func GetUserSSHSigningKeys(username, token string) ([]GitHubUserKey, error) {
+	url := fmt.Sprintf("https://api.github.com/users/%s/ssh_signing_keys", username)
+	return FetchUserKeys(url, token)
+}
+
+func FetchUserKeys(url, token string) ([]GitHubUserKey, error) {
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 {
+		return []GitHubUserKey{}, nil
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var keys []GitHubUserKey
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+		return nil, err
+	}
+
+	for i := range keys {
+		if keys[i].Key != "" {
+			fingerprint, err := computeFingerprintFromSSHKey(keys[i].Key)
+			if err != nil {
+				continue
+			}
+			keys[i].Fingerprint = fingerprint
+		}
+	}
+
+	return keys, nil
+}
+
+func computeFingerprintFromSSHKey(sshKey string) (string, error) {
+	parts := strings.Fields(sshKey)
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid SSH key format")
+	}
+
+	keyData, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode SSH key: %v", err)
+	}
+
+	h := sha256.Sum256(keyData)
+	fp := base64.StdEncoding.EncodeToString(h[:])
+
+	return fmt.Sprintf("SHA256:%s", strings.TrimRight(fp, "=")), nil
+}
+
+func GetCommitContributor(repo, commitSHA, token string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, commitSHA)
+
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var commit struct {
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&commit); err != nil {
+		return "", err
+	}
+
+	if commit.Author.Login == "" {
+		return "", fmt.Errorf("no GitHub user associated with commit")
+	}
+
+	return commit.Author.Login, nil
+}
+
+func extractEd25519KeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
 	pubKeyReader := bytes.NewReader(sshSig.PublicKey)
 
 	var keyTypeLen uint32
@@ -492,8 +932,10 @@ func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey,
 		return nil, nil, fmt.Errorf("failed to read key type: %w", err)
 	}
 
-	if string(keyType) != "ssh-ed25519" {
-		return nil, nil, fmt.Errorf("only Ed25519 keys supported, got: %s", string(keyType))
+	keyTypeStr := string(keyType)
+
+	if keyTypeStr != "ssh-ed25519" && keyTypeStr != "sk-ssh-ed25519@openssh.com" {
+		return nil, nil, fmt.Errorf("only Ed25519 keys supported, got: %s", keyTypeStr)
 	}
 
 	var pubKeyLen uint32
@@ -522,8 +964,9 @@ func extractKeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey,
 		return nil, nil, fmt.Errorf("failed to read signature type: %w", err)
 	}
 
-	if string(sigType) != "ssh-ed25519" {
-		return nil, nil, fmt.Errorf("signature type mismatch: %s", string(sigType))
+	sigTypeStr := string(sigType)
+	if sigTypeStr != "ssh-ed25519" && sigTypeStr != "sk-ssh-ed25519@openssh.com" {
+		return nil, nil, fmt.Errorf("signature type mismatch: %s", sigTypeStr)
 	}
 
 	var sigLen uint32
@@ -590,8 +1033,10 @@ func computeSSHSignedPayload(content, namespace, hashAlgorithm string) ([]byte, 
 func removeSSHSignatureFromCommit(raw string) string {
 	var b strings.Builder
 	inSig := false
+	lineCount := 0
 
 	for _, line := range strings.Split(raw, "\n") {
+		lineCount++
 		switch {
 		case strings.HasPrefix(line, "gpgsig "):
 			inSig = true
@@ -609,7 +1054,10 @@ func removeSSHSignatureFromCommit(raw string) string {
 	if b.Len() == 0 || b.String()[b.Len()-1] != '\n' {
 		b.WriteByte('\n')
 	}
-	return b.String()
+
+	result := b.String()
+
+	return result
 }
 
 func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]SignatureCheckResult, error) {
@@ -624,23 +1072,55 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]Signa
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, out)
 	}
 
-	var cmd *exec.Cmd
-	if config.CommitsToCheck > 0 {
-		cmd = exec.Command("git", "rev-list", "-n", fmt.Sprintf("%d", config.CommitsToCheck), sha)
-	} else {
-		cmd = exec.Command("git", "rev-list", sha)
+	branchToUse := config.Branch
+	checkBranchCmd := exec.Command("git", "rev-parse", "--verify", "origin/"+branchToUse)
+	checkBranchCmd.Dir = tmpDir
+	if err := checkBranchCmd.Run(); err != nil {
+		branchToUse = helpers.GetDefaultBranch(tmpDir)
 	}
 
+	var revArgs []string
+	if config.TimeCutoff != nil {
+		cutoffSHA, err := trustpolicies.GetSHAFromTime(tmpDir, branchToUse, *config.TimeCutoff)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get SHA from time: %v", err)
+		}
+		if cutoffSHA != "" {
+			revArgs = []string{"git", "rev-list", "origin/" + branchToUse, "^" + cutoffSHA}
+		} else {
+			fmt.Printf("No commits older than %s on branch %s, checking all commits\n",
+				config.TimeCutoff.Format(time.RFC3339), branchToUse)
+			revArgs = []string{"git", "rev-list", "origin/" + branchToUse}
+		}
+	} else if config.OldestSHA != "" {
+		revArgs = []string{"git", "rev-list", "origin/" + branchToUse, "^" + config.OldestSHA}
+	} else if config.CommitsToCheck > 0 {
+		revArgs = []string{"git", "rev-list", "-n", fmt.Sprint(config.CommitsToCheck), "origin/" + branchToUse}
+	} else {
+		revArgs = []string{"git", "rev-list", "origin/" + branchToUse}
+	}
+
+	cmd := exec.Command(revArgs[0], revArgs[1:]...)
 	cmd.Dir = tmpDir
 	shaListRaw, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list commits: %v", err)
+		return nil, fmt.Errorf("failed to list commits on branch %s: %v", branchToUse, err)
 	}
-	shas := strings.Split(strings.TrimSpace(string(shaListRaw)), "\n")
+
+	shaList := strings.TrimSpace(string(shaListRaw))
+	if shaList == "" {
+		return []SignatureCheckResult{}, nil
+	}
+
+	shas := strings.Split(shaList, "\n")
 
 	var results []SignatureCheckResult
 
 	for _, s := range shas {
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		catCmd := exec.CommandContext(ctx, "git", "cat-file", "commit", s)
@@ -657,21 +1137,44 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]Signa
 			continue
 		}
 
-		status, output, err := verifyPGPSignature(catOut)
+		hasSSH := strings.Contains(string(catOut), "BEGIN SSH SIGNATURE")
+		hasPGP := strings.Contains(string(catOut), "BEGIN PGP SIGNATURE")
 
-		if status == UnsignedCommit || status == MissingPublicKey {
+		var status SignatureStatus
+		var output string
+		var err error
 
-			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut)
+		if hasPGP {
+			status, output, err = verifyPGPSignature(catOut, s, config)
+		}
 
-			if sshStatus == ValidSignature {
-				status = sshStatus
-				output = sshOutput
-				err = sshErr
-			} else if sshStatus != UnsignedCommit {
+		if hasSSH {
+			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut, s, config)
+
+			if hasPGP {
+				if status == InvalidSignature || sshStatus == InvalidSignature {
+					if status == InvalidSignature {
+					} else {
+						status = sshStatus
+						output = sshOutput
+						err = sshErr
+					}
+				} else if sshStatus == ValidSignature && status != ValidSignature {
+				} else if status == ValidSignature && sshStatus != ValidSignature {
+					status = sshStatus
+					output = sshOutput
+					err = sshErr
+				}
+			} else {
 				status = sshStatus
 				output = sshOutput
 				err = sshErr
 			}
+		}
+
+		if !hasPGP && !hasSSH {
+			status = UnsignedCommit
+			output = "No signature found"
 		}
 
 		results = append(results, SignatureCheckResult{

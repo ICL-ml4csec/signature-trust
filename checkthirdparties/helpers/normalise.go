@@ -5,7 +5,7 @@ import (
 )
 
 func IsTarballURL(version string) bool {
-	return strings.HasSuffix(version, ".tgz") || strings.Contains(version, "/-/")
+	return strings.HasSuffix(version, ".tgs") || strings.Contains(version, "/-/")
 }
 
 func IsLocalPath(version string) bool {
