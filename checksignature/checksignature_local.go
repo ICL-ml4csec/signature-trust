@@ -49,6 +49,7 @@ type SignatureCheckResult struct {
 type LocalCheckConfig struct {
 	Branch                 string
 	Token                  string
+	Repo                   string
 	CommitsToCheck         int
 	OldestSHA              string
 	AcceptExpiredKeys      bool
@@ -358,7 +359,7 @@ func importPGPKeyDirectly(publicKey string) error {
 }
 
 // SSH signature verification
-func verifySSHSignature(raw []byte, config LocalCheckConfig) (SignatureStatus, string, error) {
+func verifySSHSignature(raw []byte, sha string, config LocalCheckConfig) (SignatureStatus, string, error) {
 	content := string(raw)
 
 	if !strings.Contains(content, "gpgsig -----BEGIN SSH SIGNATURE-----") {
@@ -371,8 +372,15 @@ func verifySSHSignature(raw []byte, config LocalCheckConfig) (SignatureStatus, s
 	}
 
 	if config.KeyCreationCutoff != nil && config.Token != "" {
-		ok, createdAt, err := checkSSHKeyAge(sshSig.PublicKey, config.Token, config.KeyCreationCutoff)
-		if err == nil && !ok {
+		ok, createdAt, err := checkSSHKeyAge(sshSig.PublicKey, config.Repo, sha, config.Token, config.KeyCreationCutoff)
+		if err != nil {
+			fingerprint, fpErr := computeSSHFingerprint(sshSig.PublicKey)
+			if fpErr != nil {
+				fingerprint = "unknown"
+			}
+			return MissingPublicKey, fmt.Sprintf("SSH signing key %s not found in GitHub account: %v", fingerprint, err), nil
+		}
+		if !ok {
 			fingerprint, fpErr := computeSSHFingerprint(sshSig.PublicKey)
 			if fpErr != nil {
 				fingerprint = "unknown"
@@ -655,101 +663,133 @@ func computeSSHFingerprint(pubKeyBlob []byte) (string, error) {
 	return fmt.Sprintf("SHA256:%s", strings.TrimRight(fp, "=")), nil
 }
 
-func fetchGitHubSigningKeys(token string) ([]GitHubKey, error) {
-	resp, err := client.DoGet("https://api.github.com/user/ssh_signing_keys", token)
-	if err != nil {
-		fmt.Printf("Error fetching commits: %v\n", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GitHub API failed with status %d", resp.StatusCode)
-	}
-
-	var keys []GitHubKey
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
-		return nil, err
-	}
-	return keys, nil
+type KeyAnalysisResult struct {
+	Username        string
+	KeyCount        int
+	RecentKeys      []GitHubUserKey
+	OldKeys         []GitHubUserKey
+	TotalSuspicious int
 }
 
-func checkSSHKeyAge(pubKeyBlob []byte, token string, cutoff *time.Time) (bool, *time.Time, error) {
+type GitHubUserKey struct {
+	ID          int       `json:"id"`
+	Key         string    `json:"key"`
+	CreatedAt   time.Time `json:"created_at"`
+	Fingerprint string    `json:"fingerprint"`
+	Title       string    `json:"title"`
+}
+
+func checkSSHKeyAge(pubKeyBlob []byte, repo, commitSHA, token string, cutoff *time.Time) (bool, *time.Time, error) {
 	fingerprint, err := computeSSHFingerprint(pubKeyBlob)
 	if err != nil {
 		return false, nil, err
 	}
 
-	keys, err := fetchGitHubSigningKeys(token)
-	if err == nil {
-		for _, key := range keys {
-			if key.Fingerprint == fingerprint {
-				if cutoff != nil && key.CreatedAt.After(*cutoff) {
-					return false, &key.CreatedAt, nil
-				}
-				return true, &key.CreatedAt, nil
-			}
-		}
-	}
-
-	databasePath := "local_ssh_key_dates.json"
-	needsUpdate := true
-
-	if stat, err := os.Stat(databasePath); err == nil {
-		maxAge := 1 * time.Hour
-		if time.Since(stat.ModTime()) < maxAge {
-			needsUpdate = false
-		}
-	}
-
-	if needsUpdate {
-		fmt.Printf("SSH key database is old, regenerating...")
-		os.Remove(databasePath)
-		if err := generateSSHKeyDatabase(); err != nil {
-			return false, nil, fmt.Errorf("failed to generate SSH key database: %v", err)
-		}
-	}
-
-	localDates, err := loadLocalKeyDates(databasePath)
+	username, err := GetCommitContributor(repo, commitSHA, token)
 	if err != nil {
-		return false, nil, fmt.Errorf("could not load key database: %v", err)
+		return false, nil, err
 	}
 
-	if createdAt, ok := localDates[fingerprint]; ok {
-		if cutoff != nil && createdAt.After(*cutoff) {
-			return false, &createdAt, nil
+	keys, err := GetUserSSHSigningKeys(username, token)
+	if err != nil {
+		return false, nil, err
+	}
+
+	for _, key := range keys {
+		if key.Fingerprint == fingerprint {
+			if cutoff != nil && key.CreatedAt.After(*cutoff) {
+				return false, &key.CreatedAt, nil
+			}
+			return true, &key.CreatedAt, nil
 		}
-		return true, &createdAt, nil
 	}
 
 	return false, nil, fmt.Errorf("key fingerprint not found in GitHub or local database")
 }
 
-func loadLocalKeyDates(path string) (map[string]time.Time, error) {
-	f, err := os.Open(path)
+func GetUserSSHSigningKeys(username, token string) ([]GitHubUserKey, error) {
+	url := fmt.Sprintf("https://api.github.com/users/%s/ssh_signing_keys", username)
+	return FetchUserKeys(url, token)
+}
+
+func FetchUserKeys(url, token string) ([]GitHubUserKey, error) {
+	resp, err := client.DoGet(url, token)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer resp.Body.Close()
 
-	var raw map[string]string
-	if err := json.NewDecoder(f).Decode(&raw); err != nil {
+	if resp.StatusCode == 404 {
+		return []GitHubUserKey{}, nil
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var keys []GitHubUserKey
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]time.Time)
-	for k, v := range raw {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			t, err = time.Parse("2006-01-02T15:04:05", v)
+	for i := range keys {
+		if keys[i].Key != "" {
+			fingerprint, err := computeFingerprintFromSSHKey(keys[i].Key)
 			if err != nil {
-				return nil, fmt.Errorf("error parsing time for key %s (value: %s): %v", k, v, err)
+				continue
 			}
-			t = t.UTC()
+			keys[i].Fingerprint = fingerprint
 		}
-		result[k] = t
 	}
-	return result, nil
+
+	return keys, nil
+}
+
+func computeFingerprintFromSSHKey(sshKey string) (string, error) {
+	parts := strings.Fields(sshKey)
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid SSH key format")
+	}
+
+	keyData, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode SSH key: %v", err)
+	}
+
+	h := sha256.Sum256(keyData)
+	fp := base64.StdEncoding.EncodeToString(h[:])
+
+	return fmt.Sprintf("SHA256:%s", strings.TrimRight(fp, "=")), nil
+}
+
+func GetCommitContributor(repo, commitSHA, token string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, commitSHA)
+
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var commit struct {
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&commit); err != nil {
+		return "", err
+	}
+
+	if commit.Author.Login == "" {
+		return "", fmt.Errorf("no GitHub user associated with commit")
+	}
+
+	return commit.Author.Login, nil
 }
 
 func extractEd25519KeyAndSignatureFromSSH(sshSig *SSHSignatureData) (ed25519.PublicKey, []byte, error) {
@@ -971,21 +1011,43 @@ func CheckSignatureLocal(repoPath, sha string, config LocalCheckConfig) ([]Signa
 		}
 
 		hasSSH := strings.Contains(string(catOut), "BEGIN SSH SIGNATURE")
+		hasPGP := strings.Contains(string(catOut), "BEGIN PGP SIGNATURE")
 
-		status, output, err := verifyPGPSignature(catOut, config)
+		var status SignatureStatus
+		var output string
+		var err error
+
+		if hasPGP {
+			status, output, err = verifyPGPSignature(catOut, config)
+		}
 
 		if hasSSH {
-			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut, config)
+			sshStatus, sshOutput, sshErr := verifySSHSignature(catOut, s, config)
 
-			if sshStatus == ValidSignature {
-				status = sshStatus
-				output = sshOutput
-				err = sshErr
-			} else if status == UnsignedCommit || status == MissingPublicKey {
+			if hasPGP {
+				if status == InvalidSignature || sshStatus == InvalidSignature {
+					if status == InvalidSignature {
+					} else {
+						status = sshStatus
+						output = sshOutput
+						err = sshErr
+					}
+				} else if sshStatus == ValidSignature && status != ValidSignature {
+				} else if status == ValidSignature && sshStatus != ValidSignature {
+					status = sshStatus
+					output = sshOutput
+					err = sshErr
+				}
+			} else {
 				status = sshStatus
 				output = sshOutput
 				err = sshErr
 			}
+		}
+
+		if !hasPGP && !hasSSH {
+			status = UnsignedCommit
+			output = "No signature found"
 		}
 
 		results = append(results, SignatureCheckResult{

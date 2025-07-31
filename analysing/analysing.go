@@ -1,30 +1,12 @@
 package analysing
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
-	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
-
-type KeyAnalysisResult struct {
-	Username        string
-	KeyCount        int
-	RecentKeys      []GitHubUserKey
-	OldKeys         []GitHubUserKey
-	TotalSuspicious int
-}
-
-type GitHubUserKey struct {
-	ID          int       `json:"id"`
-	Key         string    `json:"key"`
-	CreatedAt   time.Time `json:"created_at"`
-	Fingerprint string    `json:"fingerprint"`
-	Title       string    `json:"title"`
-}
 
 func GetSignedCommits(results []checksignature.SignatureCheckResult) []checksignature.SignatureCheckResult {
 	var signedCommits []checksignature.SignatureCheckResult
@@ -43,40 +25,10 @@ func GetSignedCommits(results []checksignature.SignatureCheckResult) []checksign
 	return signedCommits
 }
 
-func getCommitContributor(repo, commitSHA, token string) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, commitSHA)
+func analyseContributorAllKeys(username, token string, cutoff *time.Time) (checksignature.KeyAnalysisResult, error) {
+	result := checksignature.KeyAnalysisResult{Username: username}
 
-	resp, err := client.DoGet(url, token)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var commit struct {
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&commit); err != nil {
-		return "", err
-	}
-
-	if commit.Author.Login == "" {
-		return "", fmt.Errorf("no GitHub user associated with commit")
-	}
-
-	return commit.Author.Login, nil
-}
-
-func analyseContributorAllKeys(username, token string, cutoff *time.Time) (KeyAnalysisResult, error) {
-	result := KeyAnalysisResult{Username: username}
-
-	var allKeys []GitHubUserKey
+	var allKeys []checksignature.GitHubUserKey
 
 	// GPG keys
 	if gpgKeys, err := getUserGPGKeys(username, token); err == nil {
@@ -89,7 +41,7 @@ func analyseContributorAllKeys(username, token string, cutoff *time.Time) (KeyAn
 	}
 
 	// SSH signing keys
-	if sshSigningKeys, err := getUserSSHSigningKeys(username, token); err == nil {
+	if sshSigningKeys, err := checksignature.GetUserSSHSigningKeys(username, token); err == nil {
 		allKeys = append(allKeys, sshSigningKeys...)
 	}
 
@@ -109,42 +61,14 @@ func analyseContributorAllKeys(username, token string, cutoff *time.Time) (KeyAn
 	return result, nil
 }
 
-func getUserGPGKeys(username, token string) ([]GitHubUserKey, error) {
+func getUserGPGKeys(username, token string) ([]checksignature.GitHubUserKey, error) {
 	url := fmt.Sprintf("https://api.github.com/users/%s/gpg_keys", username)
-	return fetchUserKeys(url, token)
+	return checksignature.FetchUserKeys(url, token)
 }
 
-func getUserSSHKeys(username, token string) ([]GitHubUserKey, error) {
+func getUserSSHKeys(username, token string) ([]checksignature.GitHubUserKey, error) {
 	url := fmt.Sprintf("https://api.github.com/users/%s/keys", username)
-	return fetchUserKeys(url, token)
-}
-
-func getUserSSHSigningKeys(username, token string) ([]GitHubUserKey, error) {
-	url := fmt.Sprintf("https://api.github.com/users/%s/ssh_signing_keys", username)
-	return fetchUserKeys(url, token)
-}
-
-func fetchUserKeys(url, token string) ([]GitHubUserKey, error) {
-	resp, err := client.DoGet(url, token)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 404 {
-		return []GitHubUserKey{}, nil
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var keys []GitHubUserKey
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
-		return nil, err
-	}
-
-	return keys, nil
+	return checksignature.FetchUserKeys(url, token)
 }
 
 func getKeyType(keyString string) string {
@@ -161,7 +85,7 @@ func getKeyType(keyString string) string {
 }
 
 func AnalyseSignedCommitContributors(repo string, signedCommits []checksignature.SignatureCheckResult, token string, config checksignature.LocalCheckConfig) {
-	contributorKeys := make(map[string]KeyAnalysisResult)
+	contributorKeys := make(map[string]checksignature.KeyAnalysisResult)
 	processedContributors := make(map[string]bool)
 
 	fmt.Printf("Checking contributors for each signed commit:\n")
@@ -169,7 +93,7 @@ func AnalyseSignedCommitContributors(repo string, signedCommits []checksignature
 	for i, commit := range signedCommits {
 		fmt.Printf("   [%d/%d] Commit %s (%s) - ", i+1, len(signedCommits), commit.CommitSHA[:8], commit.Status)
 
-		contributor, err := getCommitContributor(repo, commit.CommitSHA, token)
+		contributor, err := checksignature.GetCommitContributor(repo, commit.CommitSHA, token)
 		if err != nil {
 			fmt.Printf("Could not identify contributor: %v\n", err)
 			continue
@@ -202,7 +126,7 @@ func AnalyseSignedCommitContributors(repo string, signedCommits []checksignature
 	generateTargetedSecurityReport(repo, signedCommits, contributorKeys, config)
 }
 
-func generateTargetedSecurityReport(repo string, signedCommits []checksignature.SignatureCheckResult, contributorKeys map[string]KeyAnalysisResult, config checksignature.LocalCheckConfig) {
+func generateTargetedSecurityReport(repo string, signedCommits []checksignature.SignatureCheckResult, contributorKeys map[string]checksignature.KeyAnalysisResult, config checksignature.LocalCheckConfig) {
 	fmt.Printf("\n" + strings.Repeat("-", 60) + "\n")
 	fmt.Printf("Contributor analysis: %s\n", repo)
 	fmt.Printf(strings.Repeat("-", 60) + "\n")

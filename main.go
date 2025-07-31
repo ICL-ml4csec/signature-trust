@@ -107,6 +107,7 @@ func main() {
 	config := checksignature.LocalCheckConfig{
 		Branch:                 branch,
 		Token:                  token,
+		Repo:                   repo,
 		CommitsToCheck:         commitsToCheck,
 		OldestSHA:              oldestSHA,
 		AcceptExpiredKeys:      acceptExpiredKeys,
