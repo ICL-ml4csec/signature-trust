@@ -22,8 +22,8 @@ type Replacement struct {
 
 var replaceMap = make(map[string]Replacement)
 
-// ParseGoWithResults parses go.mod and returns structured dependency results
-func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
+// ParseGo parses go.mod and returns structured dependency results
+func ParseGo(modFile, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
 	var results []output.DependencyReport
 
 	data, err := os.Open(modFile)
@@ -80,7 +80,6 @@ func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, ti
 		}
 	}
 
-	// Rest of function remains the same...
 	// Second pass: process dependencies and collect results
 	_, err = data.Seek(0, 0)
 	if err != nil {
@@ -240,7 +239,7 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 		}
 	}
 
-	// Check signatures using the repo's full name
+	// Check signatures using repo's full name
 	signatureResults, err := checksignature.CheckSignatureLocal(repoInfo.FullName, sha, config)
 	if err != nil {
 		fmt.Printf("Error checking signatures for %s: %v\n\n", repoInfo.FullName, err)
@@ -256,7 +255,6 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 	summary := checksignature.ProcessSignatureResults(signatureResults, config)
 	output.PrintDependencyConsoleOutput(summary, config, "go.mod", repoInfo.FullName, version, len(signatureResults), outputFormat)
 
-	// Rest of your existing status determination logic...
 	var status string
 	var issues []string
 
@@ -266,7 +264,6 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 	} else if summary.RejectedByPolicy > 0 {
 		status = "FAILED"
 		fmt.Printf("Dependency %s@%s rejected by policy\n", repoInfo.FullName, version)
-		// ... your existing issue collection logic
 	} else {
 		status = "PASSED"
 		fmt.Printf("Dependency %s@%s passed policy check\n", repoInfo.FullName, version)
