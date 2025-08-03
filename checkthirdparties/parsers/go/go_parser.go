@@ -225,7 +225,11 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 	var status string
 	var issues []string
 
-	if summary.RejectedByPolicy > 0 {
+	if len(signatureResults) == 0 {
+		status = "SKIPPED"
+		fmt.Printf("Dependency %s@%s: No relevant commits found that fit the criteria (skipped)\n", cleanedRepo, version)
+
+	} else if summary.RejectedByPolicy > 0 {
 		status = "FAILED"
 		fmt.Printf("Dependency %s@%s rejected by policy\n", cleanedRepo, version)
 
@@ -239,17 +243,52 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 			issues = append(issues, fmt.Sprintf("%d missing keys", statusCount))
 		}
 
-		// Look for other status types that indicate issues
+		// Look for expired keys
+		if statusCount, exists := summary.StatusBreakdown["valid-but-expired-key"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d expired keys", statusCount))
+		}
+
+		// Look for uncertified signers
+		if statusCount, exists := summary.StatusBreakdown["valid-but-not-certified"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d uncertified signers", statusCount))
+		}
+
+		// Look for unregistered keys
+		if statusCount, exists := summary.StatusBreakdown["valid-but-key-not-on-github"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d unregistered keys", statusCount))
+		}
+
+		// Look for email mismatches
+		if statusCount, exists := summary.StatusBreakdown["signed-but-untrusted-email"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d email mismatches", statusCount))
+		}
+
+		// Look for invalid signatures
+		if statusCount, exists := summary.StatusBreakdown["invalid"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d invalid signatures", statusCount))
+		}
+
+		// Look for verification errors
+		if statusCount, exists := summary.StatusBreakdown["error"]; exists && statusCount > 0 {
+			issues = append(issues, fmt.Sprintf("%d verification errors", statusCount))
+		}
+
+		// Catch any other status types that might be added in the future
 		for status, count := range summary.StatusBreakdown {
 			if count > 0 && status != "valid" && status != "github-automated-signature" {
-				found := false
-				for _, issue := range issues {
-					if strings.Contains(issue, status) {
-						found = true
-						break
-					}
+				// Check if we already handled this status
+				knownStatuses := map[string]bool{
+					"unsigned":                    true,
+					"signed-but-missing-key":      true,
+					"valid-but-expired-key":       true,
+					"valid-but-not-certified":     true,
+					"valid-but-key-not-on-github": true,
+					"signed-but-untrusted-email":  true,
+					"invalid":                     true,
+					"error":                       true,
 				}
-				if !found {
+
+				if !knownStatuses[status] {
 					issues = append(issues, fmt.Sprintf("%d %s", count, status))
 				}
 			}
@@ -258,6 +297,7 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 		if len(issues) == 0 {
 			issues = append(issues, fmt.Sprintf("%d commits rejected by policy", summary.RejectedByPolicy))
 		}
+
 	} else {
 		status = "PASSED"
 		fmt.Printf("Dependency %s@%s passed policy check\n", cleanedRepo, version)

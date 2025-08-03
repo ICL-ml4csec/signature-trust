@@ -57,7 +57,6 @@ func main() {
 
 	// Handle time-based vs commit-based checking
 	if lookbackArg != "" {
-		fmt.Printf("Using time-based checking (lookback: %s)\n", lookbackArg)
 
 		if strings.ToLower(commitsArg) != "all" {
 			fmt.Printf("Warning: When using lookback duration, commits parameter should be 'all'. Using 'all' instead of '%s'\n", commitsArg)
