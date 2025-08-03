@@ -110,6 +110,10 @@ func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCh
 	}
 
 	fmt.Printf("\n== RESULTS ==\n")
+	if commitsChecked == 0 {
+		return
+	}
+
 	fmt.Printf("Signature Check Summary (%s):\n", packageName)
 	fmt.Printf("    Total commits: %d\n", summary.TotalCommits)
 	fmt.Printf("    Valid signatures: %d\n", summary.ValidSignatures)
