@@ -17,13 +17,25 @@ import (
 
 func main() {
 	if len(os.Args) < 9 {
-		fmt.Printf("Usage: <repository> <branch> <token> <commits|lookback> <lookback-duration-or-empty> <key-creation-cutoff> <repo-policy> <deps-policy> [output-format] [output-file]\n")
+		fmt.Printf("Usage: <repository> <branch> <token> <commits|all> <time-period> <key-age-period> <repo-policy> <deps-policy> [output-format] [output-file]\n")
+		fmt.Printf("\n")
+		fmt.Printf("Time periods: Use human-readable formats like:\n")
+		fmt.Printf("  Days:    '1 day', '7 days', '30 days', '90 days'\n")
+		fmt.Printf("  Weeks:   '1 week', '2 weeks', '4 weeks'\n")
+		fmt.Printf("  Months:  '1 month', '3 months', '6 months'\n")
+		fmt.Printf("  Years:   '1 year', '2 years', '5 years'\n")
+		fmt.Printf("  Short:   '1d', '1w', '1m', '1y'\n")
+		fmt.Printf("  Custom:  '10 days', '18 months', '2 years'\n")
+		fmt.Printf("  Empty:   Use \"\" for no time limit\n")
+		fmt.Printf("\n")
 		fmt.Printf("Policy format: expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized (true/false for each)\n")
-		fmt.Printf("Output formats: console, json, both (default: console)\n")
+		fmt.Printf("Output formats: console, json (default: console)\n")
+		fmt.Printf("\n")
 		fmt.Printf("Examples:\n")
-		fmt.Printf("  Console only:     ... \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\"\n")
-		fmt.Printf("  JSON file:        ... \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\" json report.json\n")
-		fmt.Printf("  Both:             ... \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\" both report.json\n")
+		fmt.Printf("  6 months back:    myrepo main token all \"6 months\" \"1 week\" \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\"\n")
+		fmt.Printf("  1 year + JSON:    myrepo main token all \"1 year\" \"30 days\" \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\" json report.json\n")
+		fmt.Printf("  No time limit:    myrepo main token all \"\" \"1 day\" \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\"\n")
+		fmt.Printf("  Short format:     myrepo main token all \"3m\" \"1d\" \"false:false:false:false:true:false:false\" \"true:true:true:true:true:true:true\"\n")
 		os.Exit(1)
 	}
 
@@ -34,8 +46,8 @@ func main() {
 	var commitsToCheck int
 
 	commitsArg := os.Args[4]
-	lookbackArg := os.Args[5]
-	keyCreationCutoffArg := os.Args[6]
+	originalTimePeriod := os.Args[5]
+	originalKeyPeriod := os.Args[6]
 	repoPolicyArg := os.Args[7]
 	depsPolicyArg := os.Args[8]
 
@@ -56,7 +68,7 @@ func main() {
 	}
 
 	// Handle time-based vs commit-based checking
-	if lookbackArg != "" {
+	if originalTimePeriod != "" {
 
 		if strings.ToLower(commitsArg) != "all" {
 			fmt.Printf("Warning: When using lookback duration, commits parameter should be 'all'. Using 'all' instead of '%s'\n", commitsArg)
@@ -98,21 +110,22 @@ func main() {
 
 	// Parse time cutoff
 	var timeCutoff *time.Time
-	if lookbackArg != "" {
-		dur, _ := time.ParseDuration(lookbackArg)
-		since := time.Now().Add(-dur)
-		timeCutoff = &since
+	var keyCreationTimeCutoff *time.Time
+
+	// Parse time cutoff
+	timeCutoff, err = helpers.ParseTimePeriod(originalTimePeriod)
+	if err != nil {
+		fmt.Printf("Invalid time cutoff period: %v\n", err)
+		fmt.Printf("Supported formats: %v\n", helpers.GetSupportedTimePeriods())
+		return
 	}
 
 	// Parse key creation cutoff
-	var keyCreationTimeCutoff *time.Time
-	if keyCreationCutoffArg != "" {
-		keyCutoffDur, err := time.ParseDuration(keyCreationCutoffArg)
-		if err != nil {
-			log.Fatalf("invalid key creation cutoff duration: %v", err)
-		}
-		cutoff := time.Now().Add(-keyCutoffDur)
-		keyCreationTimeCutoff = &cutoff
+	keyCreationTimeCutoff, err = helpers.ParseTimePeriod(originalKeyPeriod)
+	if err != nil {
+		fmt.Printf("Invalid key age cutoff period: %v\n", err)
+		fmt.Printf("Supported formats: %v\n", helpers.GetSupportedTimePeriods())
+		return
 	}
 
 	repoConfig := types.LocalCheckConfig{
@@ -145,6 +158,8 @@ func main() {
 		AcceptUnregisteredKeys:  depsPolicy.AcceptUnregisteredKeys,
 		TimeCutoff:              timeCutoff,
 		KeyCreationCutoff:       keyCreationTimeCutoff,
+		OriginalTimePeriod:      originalTimePeriod,
+		OriginalKeyPeriod:       originalKeyPeriod,
 	}
 
 	fmt.Print("Signature verification...\n")

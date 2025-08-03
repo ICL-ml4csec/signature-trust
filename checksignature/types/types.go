@@ -31,6 +31,8 @@ type LocalCheckConfig struct {
 	AcceptUnregisteredKeys  bool
 	TimeCutoff              *time.Time
 	KeyCreationCutoff       *time.Time
+	OriginalTimePeriod      string
+	OriginalKeyPeriod       string
 }
 
 type GitHubGPGKey struct {

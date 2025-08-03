@@ -101,12 +101,15 @@ func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCh
 	fmt.Printf("     Package: %s Version: %s\n", packageName, version)
 
 	if config.TimeCutoff != nil {
-		fmt.Printf("     Commits newer than %s\n", config.TimeCutoff.Format("2006-01-02"))
+		fmt.Printf("     Commits newer than %s (%s)\n",
+			config.OriginalTimePeriod,
+			config.TimeCutoff.Format("2 Jan 2006"))
 	}
 
 	if config.KeyCreationCutoff != nil {
-		cutoffDuration := time.Since(*config.KeyCreationCutoff)
-		fmt.Printf("     Key age policy: Signing keys must be older than %s\n", formatDuration(cutoffDuration))
+		fmt.Printf("     Key age policy: Signing keys must be older than %s (%s)\n",
+			config.OriginalKeyPeriod,
+			config.KeyCreationCutoff.Format("2 Jan 2006"))
 	}
 
 	fmt.Printf("\n== RESULTS ==\n")
