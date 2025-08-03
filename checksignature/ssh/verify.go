@@ -54,13 +54,6 @@ func computeSignedPayload(content, namespace, hashAlgorithm string) ([]byte, err
 	return payload.Bytes(), nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Verify performs complete SSH signature verification
 func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.SignatureStatus, string, error) {
 	content := string(raw)

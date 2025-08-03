@@ -24,6 +24,7 @@ type pypiResponse struct {
 	Releases map[string]interface{} `json:"releases"`
 }
 
+// parseRequirementLine parses a line from requirements.txt
 func parseRequirementLine(line string) (string, string) {
 	if strings.Contains(line, "==") {
 		parts := strings.SplitN(line, "==", 2)
@@ -36,6 +37,7 @@ func parseRequirementLine(line string) (string, string) {
 	return strings.TrimSpace(line), ""
 }
 
+// extractRepoURLFromPyPI extracts the repository URL from the PyPI response
 func extractRepoURLFromPyPI(pypiResp pypiResponse) string {
 	if url, ok := pypiResp.Info.ProjectURLs["Homepage"]; ok && url != "" {
 		return url
@@ -78,6 +80,7 @@ func ParseRequirements(file string, token string, config types.LocalCheckConfig,
 	return results, nil
 }
 
+// processPythonDependency processes a single line from requirements.txt
 func processPythonDependency(line, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	packageName, version := parseRequirementLine(line)
 	if packageName == "" {

@@ -175,6 +175,7 @@ func writeToFile(filename string, data []byte) error {
 	return os.WriteFile(filename, data, 0644)
 }
 
+// HandleCombinedJSONOutput generates a combined JSON report for both repository and dependencies
 func HandleCombinedJSONOutput(
 	repoSummary SignatureSummary,
 	repoConfig types.LocalCheckConfig,
@@ -198,6 +199,7 @@ func HandleCombinedJSONOutput(
 	}
 }
 
+// ToCombinedJSON creates a comprehensive JSON report combining repository and dependency analysis
 func ToCombinedJSON(
 	repoSummary SignatureSummary,
 	repoConfig types.LocalCheckConfig,

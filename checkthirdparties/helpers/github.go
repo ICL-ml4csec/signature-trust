@@ -25,6 +25,7 @@ type RepoInfo struct {
 	URL      string `json:"url"`
 }
 
+// GetSHAFromTag retrieves the SHA of a specific tag from a GitHub repository
 func GetSHAFromTag(repoInfo *RepoInfo, version string, token string) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoInfo.FullName)
 	resp, err := client.DoGet(url, token)
@@ -62,6 +63,7 @@ func GetSHAFromTag(repoInfo *RepoInfo, version string, token string) (string, er
 	return "", fmt.Errorf("no matching tag found for version %s", version)
 }
 
+// GetSHAFromBranch retrieves the SHA of the latest commit on a specific branch
 func GetSHAFromBranch(repo string, branch string, token string) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, branch)
 	resp, err := client.DoGet(url, token)
@@ -125,11 +127,13 @@ func ExtractRepoInfo(url string) (*RepoInfo, error) {
 	}, nil
 }
 
+// ExpandGitHubShorthand expands shorthand GitHub URLs to full git+https format
 func ExpandGitHubShorthand(input string) string {
 	clean := strings.TrimPrefix(input, "github:")
 	return "git+https://github.com/" + clean + ".git"
 }
 
+// ExtractGitTag extracts the tag from a GitHub URL if present
 func ExtractGitTag(url string) string {
 	if idx := strings.Index(url, "#"); idx != -1 {
 		return url[idx+1:]
@@ -137,6 +141,7 @@ func ExtractGitTag(url string) string {
 	return ""
 }
 
+// GetDefaultBranch retrieves the default branch of a GitHub repository
 func GetDefaultBranch(repoDir string) string {
 	defaultBranchCmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
 	defaultBranchCmd.Dir = repoDir

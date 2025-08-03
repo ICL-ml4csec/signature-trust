@@ -12,11 +12,13 @@ import (
 	pyparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/python"
 )
 
+// fileExists checks if a file exists at the given path
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	return err == nil && !info.IsDir()
 }
 
+// CheckThirdPartiesWithResults checks third-party dependencies and returns detailed results
 func CheckThirdPartiesWithResults(token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
 	var results []output.DependencyReport
 

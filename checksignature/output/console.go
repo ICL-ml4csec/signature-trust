@@ -317,6 +317,7 @@ func assessRiskLevel(analysis ContributorAnalysis) string {
 	return "LOW"
 }
 
+// formatDuration formats a time.Duration into a human-readable string
 func formatDuration(d time.Duration) string {
 	hours := int(d.Hours())
 	if hours < 24 {
@@ -329,6 +330,7 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fmo", float64(days)/30.0)
 }
 
+// CalculateSecurityScore computes the security score based on accepted commits
 func CalculateSecurityScore(summary SignatureSummary) float64 {
 	if summary.TotalCommits == 0 {
 		return 0.0
