@@ -50,8 +50,8 @@ func main() {
 	}
 
 	// Validate output format
-	if outputFormat != "console" && outputFormat != "json" && outputFormat != "both" {
-		fmt.Printf("Invalid output format: %s. Must be 'console', 'json', or 'both'\n", outputFormat)
+	if outputFormat != "console" && outputFormat != "json" {
+		fmt.Printf("Invalid output format: %s. Must be 'console' or 'json'\n", outputFormat)
 		os.Exit(1)
 	}
 
@@ -64,13 +64,6 @@ func main() {
 		}
 
 		commitsToCheck = -1
-
-		dur, err := time.ParseDuration(lookbackArg)
-		if err != nil {
-			log.Fatalf("invalid lookback duration (%q): %v", lookbackArg, err)
-		}
-		since := time.Now().Add(-dur)
-		fmt.Printf("Time-based cutoff: %s (checking commits newer than this)\n", since.Format(time.RFC3339))
 
 	} else {
 		if strings.ToLower(commitsArg) == "all" {
@@ -155,6 +148,7 @@ func main() {
 		KeyCreationCutoff:       keyCreationTimeCutoff,
 	}
 
+	fmt.Print("Signature verification...\n")
 	// === REPOSITORY SIGNATURE CHECK ===
 	results, err := checksignature.CheckSignatureLocal(repo, "", repoConfig)
 	if err != nil {
@@ -164,24 +158,19 @@ func main() {
 
 	summary := checksignature.ProcessSignatureResults(results, repoConfig)
 
-	// Console output (always show summary unless JSON-only)
-	if outputFormat == "console" || outputFormat == "both" {
-		output.PrintRepositoryConsoleOutput(summary, repoConfig, repo)
-	}
+	output.PrintRepositoryConsoleOutput(summary, repoConfig, outputFormat)
 
 	// === DEPENDENCIES CHECK ===
-	fmt.Printf("\n=== THIRD-PARTY DEPENDENCIES CHECK ===\n")
-
 	var dependencyResults []output.DependencyReport
 
-	depResults, err := checkthirdparties.CheckThirdPartiesWithResults(token, depsConfig, timeCutoff)
+	depResults, err := checkthirdparties.CheckThirdPartiesWithResults(token, depsConfig, timeCutoff, outputFormat)
 	if err != nil {
 		fmt.Printf("Dependency check failed: %v\n", err)
 	} else {
 		dependencyResults = depResults
 	}
 
-	if outputFormat == "json" || outputFormat == "both" {
+	if outputFormat == "json" {
 		if err := output.HandleCombinedJSONOutput(summary, repoConfig, results, dependencyResults, outputFile); err != nil {
 			fmt.Printf("Failed to generate combined JSON output: %v\n", err)
 		}

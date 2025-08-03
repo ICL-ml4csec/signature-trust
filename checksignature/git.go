@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 )
 
 // CheckSignatureLocal performs signature verification on a Git repository
-func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([]types.SignatureCheckResult, error) {
+func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([]output.SignatureCheckResult, error) {
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
 	tmpDir, err := os.MkdirTemp("", "repo-")
 	if err != nil {
@@ -40,7 +41,7 @@ func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([
 	}
 
 	// Verify signatures for each commit
-	var results []types.SignatureCheckResult
+	var results []output.SignatureCheckResult
 	for _, commitSHA := range commits {
 		if strings.TrimSpace(commitSHA) == "" {
 			continue
@@ -125,7 +126,7 @@ func getCommitsToCheck(tmpDir, branch string, config types.LocalCheckConfig) ([]
 }
 
 // verifyCommitSignature verifies the signature of a single commit
-func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConfig) types.SignatureCheckResult {
+func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConfig) output.SignatureCheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -134,7 +135,7 @@ func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConf
 	catOut, catErr := catCmd.CombinedOutput()
 
 	if catErr != nil {
-		return types.SignatureCheckResult{
+		return output.SignatureCheckResult{
 			CommitSHA: commitSHA,
 			Status:    string(types.VerificationError),
 			Output:    string(catOut),
@@ -142,22 +143,58 @@ func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConf
 		}
 	}
 
-	return determineSignatureStatus(catOut, commitSHA, config)
+	author, timestamp := parseAuthorAndTimestamp(catOut)
+
+	return determineSignatureStatus(catOut, commitSHA, config, author, timestamp)
+}
+
+func parseAuthorAndTimestamp(catOut []byte) (output.AuthorInfo, time.Time) {
+	var author output.AuthorInfo
+	var timestamp time.Time
+
+	lines := strings.Split(string(catOut), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "author ") {
+			parts := strings.Split(line, " ")
+			if len(parts) >= 3 {
+				nameAndEmail := strings.Join(parts[1:len(parts)-2], " ")
+				nameEmailSplit := strings.SplitN(nameAndEmail, "<", 2)
+				if len(nameEmailSplit) == 2 {
+					author.Name = strings.TrimSpace(nameEmailSplit[0])
+					author.Email = strings.TrimSuffix(strings.TrimSpace(nameEmailSplit[1]), ">")
+				}
+				unixStr := parts[len(parts)-2]
+				unixInt, err := strconv.ParseInt(unixStr, 10, 64)
+				if err == nil {
+					timestamp = time.Unix(unixInt, 0).UTC()
+				}
+			}
+			break
+		}
+	}
+	return author, timestamp
 }
 
 // determineSignatureStatus analyzes commit content and determines signature status
-func determineSignatureStatus(catOut []byte, commitSHA string, config types.LocalCheckConfig) types.SignatureCheckResult {
+func determineSignatureStatus(
+	catOut []byte,
+	commitSHA string,
+	config types.LocalCheckConfig,
+	author output.AuthorInfo,
+	timestamp time.Time,
+) output.SignatureCheckResult {
 	content := string(catOut)
 	hasSSH := strings.Contains(content, "BEGIN SSH SIGNATURE")
 	hasPGP := strings.Contains(content, "BEGIN PGP SIGNATURE")
 
 	var status types.SignatureStatus
-	var output string
+	var rawOutput string
 	var err error
+	var sshSig *types.SSHSignatureData
 
 	// Verify PGP signature if present
 	if hasPGP {
-		status, output, err = gpg.Verify(catOut, commitSHA, config)
+		status, rawOutput, err = gpg.Verify(catOut, commitSHA, config)
 	}
 
 	// Verify SSH signature if present
@@ -166,10 +203,10 @@ func determineSignatureStatus(catOut []byte, commitSHA string, config types.Loca
 
 		// Handle dual signature scenarios
 		if hasPGP {
-			status, output, err = resolveDualSignatureConflict(status, output, err, sshStatus, sshOutput, sshErr)
+			status, rawOutput, err = resolveDualSignatureConflict(status, rawOutput, err, sshStatus, sshOutput, sshErr)
 		} else {
 			status = sshStatus
-			output = sshOutput
+			rawOutput = sshOutput
 			err = sshErr
 		}
 	}
@@ -177,15 +214,67 @@ func determineSignatureStatus(catOut []byte, commitSHA string, config types.Loca
 	// Handle unsigned commits
 	if !hasPGP && !hasSSH {
 		status = types.UnsignedCommit
-		output = "No signature found"
+		rawOutput = "No signature found"
 	}
 
-	return types.SignatureCheckResult{
-		CommitSHA: commitSHA,
-		Status:    string(status),
-		Output:    output,
-		Err:       err,
+	author.IsAutomated = false
+
+	if status != types.UnsignedCommit && status != types.InvalidSignature {
+		author.IsAutomated = trustpolicies.IsGitHubAutomatedCommit(rawOutput, string(catOut), sshSig)
 	}
+
+	return output.SignatureCheckResult{
+		CommitSHA:           commitSHA,
+		Status:              string(status),
+		Output:              rawOutput,
+		Err:                 err,
+		Author:              author,
+		Timestamp:           timestamp,
+		AcceptedByPolicy:    applyPolicy(string(status), config),
+		HardPolicyViolation: isHardRejection(string(status), config),
+	}
+
+}
+
+// applyPolicy checks if a signature status is acceptable based on the policy configuration
+func applyPolicy(status string, config types.LocalCheckConfig) bool {
+	switch status {
+	case "valid":
+		return true
+
+	case "github-automated-signature":
+		return config.AcceptGitHubAutomated
+
+	case "unsigned":
+		return config.AcceptUnsignedCommits
+
+	case "signed-but-missing-key":
+		return config.AcceptMissingPublicKey
+
+	case "valid-but-expired-key":
+		return config.AcceptExpiredKeys
+
+	case "valid-but-not-certified":
+		return config.AcceptUncertifiedSigner
+
+	case "valid-but-untrusted-email":
+		return config.AcceptEmailMismatches
+
+	case "valid-but-key-not-on-github":
+		return config.AcceptUnregisteredKeys
+
+	case "invalid", "error":
+		return false
+
+	default:
+		return false
+	}
+}
+
+// isHardRejection checks if a commit's status is a hard rejection based on policy
+func isHardRejection(status string, config types.LocalCheckConfig) bool {
+	// A hard rejection occurs when a commit fails and is NOT allowed by policy
+	return !applyPolicy(status, config)
 }
 
 // resolveDualSignatureConflict handles commits with both GPG and SSH signatures
@@ -215,7 +304,7 @@ func resolveDualSignatureConflict(pgpStatus types.SignatureStatus, pgpOutput str
 }
 
 // ProcessSignatureResults processes signature check results and applies policies
-func ProcessSignatureResults(results []types.SignatureCheckResult, config types.LocalCheckConfig) output.SignatureSummary {
+func ProcessSignatureResults(results []output.SignatureCheckResult, config types.LocalCheckConfig) output.SignatureSummary {
 	summary := output.SignatureSummary{
 		TotalCommits:     len(results),
 		ValidSignatures:  0,

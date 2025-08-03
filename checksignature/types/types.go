@@ -17,13 +17,6 @@ const (
 	VerificationError                   SignatureStatus = "error"
 )
 
-type SignatureCheckResult struct {
-	CommitSHA string
-	Status    string
-	Output    string
-	Err       error
-}
-
 type LocalCheckConfig struct {
 	Branch                  string
 	Token                   string

@@ -23,7 +23,7 @@ type Replacement struct {
 var replaceMap = make(map[string]Replacement)
 
 // ParseGoWithResults parses go.mod and returns structured dependency results
-func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, timeCutoff *time.Time) ([]output.DependencyReport, error) {
+func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
 	var results []output.DependencyReport
 
 	data, err := os.Open(modFile)
@@ -100,7 +100,7 @@ func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, ti
 			line = strings.TrimPrefix(line, "require ")
 
 			// Process dependency and collect result
-			depResult := parseGoDependencyLineWithResult(line, token, config, timeCutoff)
+			depResult := parseGoDependencyLineWithResult(line, token, config, timeCutoff, outputFormat)
 			if depResult != nil {
 				results = append(results, *depResult)
 			}
@@ -111,7 +111,7 @@ func ParseGoWithResults(modFile, token string, config types.LocalCheckConfig, ti
 }
 
 // parseGoDependencyLineWithResult processes a dependency line and returns a DependencyReport
-func parseGoDependencyLineWithResult(line string, token string, config types.LocalCheckConfig, timeCutoff *time.Time) *output.DependencyReport {
+func parseGoDependencyLineWithResult(line string, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	line = strings.TrimSpace(line)
 
 	if strings.HasPrefix(line, "//") || line == "" {
@@ -219,7 +219,7 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 
 	// Process results
 	summary := checksignature.ProcessSignatureResults(signatureResults, config)
-	output.PrintDependencyConsoleOutput(summary, config, "go.mod", cleanedRepo, version, len(signatureResults))
+	output.PrintDependencyConsoleOutput(summary, config, "go.mod", cleanedRepo, version, len(signatureResults), outputFormat)
 
 	// Determine status and collect issues
 	var status string
@@ -227,7 +227,7 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 
 	if summary.RejectedByPolicy > 0 {
 		status = "FAILED"
-		fmt.Printf("Dependency %s@%s rejected by policy\n\n", cleanedRepo, version)
+		fmt.Printf("Dependency %s@%s rejected by policy\n", cleanedRepo, version)
 
 		// Look for unsigned commits in status breakdown
 		if statusCount, exists := summary.StatusBreakdown["unsigned"]; exists && statusCount > 0 {
@@ -260,7 +260,7 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 		}
 	} else {
 		status = "PASSED"
-		fmt.Printf("Dependency %s@%s passed policy check\n\n", cleanedRepo, version)
+		fmt.Printf("Dependency %s@%s passed policy check\n", cleanedRepo, version)
 	}
 
 	fmt.Println()
@@ -268,9 +268,15 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 	return &output.DependencyReport{
 		Package:         cleanedRepo,
 		Version:         version,
+		Manifest:        "go.mod",
 		Status:          status,
 		Issues:          issues,
 		CommitsChecked:  len(signatureResults),
 		ValidSignatures: summary.ValidSignatures,
+		Summary:         output.BuildSignatureAnalysis(summary, signatureResults),
+		Commits:         output.BuildCommitAnalysis(signatureResults),
+		Policy:          output.BuildPolicyConfiguration(config),
+		KeyAgePolicy:    helpers.CreateKeyAgeRange(config),
+		TimeRangePolicy: helpers.CreateTimeRange(timeCutoff),
 	}
 }

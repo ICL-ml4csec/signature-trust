@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 	"github.com/ICL-ml4csec/msc-hmj24/client"
-	"github.com/ICL-ml4csec/msc-hmj24/outputs"
 )
 
 type PackageJSON struct {
@@ -175,12 +173,12 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config type
 
 				printResults(depType, pkg, resolved, normalisedRepo, sha, token, config.CommitsToCheck)
 
-				results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
-				if err != nil {
-					fmt.Println("Error checking signatures locally:", err)
-					continue
-				}
-				outputs.PrintSignatureResults(results, "Local", config)
+				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
+				// if err != nil {
+				// 	fmt.Println("Error checking signatures locally:", err)
+				// 	continue
+				// }
+				// outputs.PrintSignatureResults(results, "Local", config)
 
 			}
 		}
