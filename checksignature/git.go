@@ -148,6 +148,7 @@ func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConf
 	return determineSignatureStatus(catOut, commitSHA, config, author, timestamp)
 }
 
+// parseAuthorAndTimestamp extracts author information and timestamp from commit content
 func parseAuthorAndTimestamp(catOut []byte) (output.AuthorInfo, time.Time) {
 	var author output.AuthorInfo
 	var timestamp time.Time

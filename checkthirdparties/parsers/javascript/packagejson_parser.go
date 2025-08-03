@@ -28,6 +28,7 @@ type NpmPackageResponse struct {
 	DistTags map[string]string      `json:"dist-tags"`
 }
 
+// extractRepoURLFromNpm extracts the repository URL from the NPM package response
 func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
 	repoURL := npmResp.Repository.URL
 	if repoURL == "" {
@@ -89,6 +90,7 @@ func processJSDependency(pkg, version, token string, config types.LocalCheckConf
 	}
 }
 
+// processGitDependency processes a Git dependency and returns a DependencyReport
 func processGitDependency(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	fmt.Printf("[INFO] Git dependency for %q: %q\n", normalisedName, cleanVersion)
 	tag := helpers.ExtractGitTag(cleanVersion)
@@ -119,6 +121,7 @@ func processGitDependency(pkg, normalisedName, cleanVersion, token string, confi
 	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, tag, token, config, timeCutoff, outputFormat, "package.json")
 }
 
+// processGitHubShorthand processes a GitHub shorthand dependency and returns a DependencyReport
 func processGitHubShorthand(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
 	gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
@@ -143,6 +146,7 @@ func processGitHubShorthand(pkg, normalisedName, cleanVersion, token string, con
 	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, tag, token, config, timeCutoff, outputFormat, "package.json")
 }
 
+// processNpmDependency processes an NPM dependency and returns a DependencyReport
 func processNpmDependency(pkg, normalisedName, version, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	url := fmt.Sprintf("https://registry.npmjs.org/%s", normalisedName)
 	resp, err := client.DoGet(url, token)

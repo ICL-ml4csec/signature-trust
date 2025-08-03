@@ -4,6 +4,7 @@ import (
 	"net/http"
 )
 
+// DoGet performs a GET request to the specified URL with authentication token
 func DoGet(url string, token string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

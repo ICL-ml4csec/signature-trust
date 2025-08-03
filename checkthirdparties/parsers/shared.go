@@ -11,6 +11,7 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 )
 
+// CheckSignaturesAndBuildReport checks signatures for a given package version and builds a detailed report
 func CheckSignaturesAndBuildReport(repoInfo *helpers.RepoInfo, pkg, version, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat, manifest string) *output.DependencyReport {
 	// Get SHA from tag
 	sha, err := helpers.GetSHAFromTag(repoInfo, version, token)
