@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers"
 	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
@@ -34,166 +36,24 @@ func extractRepoURLFromNpm(npmResp NpmPackageResponse) string {
 	return repoURL
 }
 
-func printResults(depType, pkg, version, repo, sha, token string, commitsToCheck int) {
-	fmt.Printf("Manifest: package.json (%s)\n", depType)
-	fmt.Printf("Package: %s Version: %s\n", pkg, version)
-	fmt.Printf("Repository URL: %s\n", repo)
-	// checksignature.CheckSignature(repo, sha, token, commitsToCheck)
-}
-
-func ParsePackageJSON(file string, token string, commitsToCheck int, config types.LocalCheckConfig, timeCutOff *time.Time) error {
+// ParsePackageJSON parses package.json and returns structured dependency results
+func ParsePackageJSON(file string, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
+	var results []output.DependencyReport
 	var packageJSON PackageJSON
 
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return fmt.Errorf("error reading file: %v", err)
+		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 	if err := json.Unmarshal(data, &packageJSON); err != nil {
-		return fmt.Errorf("error parsing package.json: %v", err)
+		return nil, fmt.Errorf("error parsing package.json: %v", err)
 	}
 
 	processDeps := func(depType string, deps map[string]string) {
 		for pkg, version := range deps {
-			if helpers.IsTarballURL(version) || helpers.IsLocalPath(version) {
-				fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, version)
-			}
-
-			normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, version)
-			resolved := cleanVersion
-
-			switch kind {
-			case "git":
-				fmt.Printf("[INFO] Git dependency for %q: %q\n", normalisedName, cleanVersion)
-				tag := helpers.ExtractGitTag(cleanVersion)
-				if tag == "" {
-					fmt.Printf("[WARN] No tag found in Git URL for %q\n", normalisedName)
-					continue
-				}
-				baseURL := strings.Split(cleanVersion, "#")[0]
-
-				repoInfo, err := helpers.ExtractRepoInfo(baseURL)
-				if err != nil {
-					fmt.Printf("[WARN] Invalid Git repository URL for %q: %v\n", normalisedName, err)
-					continue
-				}
-
-				sha, err := helpers.GetSHAFromTag(repoInfo, tag, token)
-				if err != nil {
-					fmt.Printf("[WARN] Failed to resolve SHA for tag %q in %q: %v\n", tag, repoInfo.FullName, err)
-					continue
-				}
-
-				printResults(depType, pkg, tag, repoInfo.FullName, sha, token, commitsToCheck)
-				continue
-
-			case "github-shorthand":
-				fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
-				gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
-
-				repoInfo, err := helpers.ExtractRepoInfo(gitURL)
-				if err != nil {
-					fmt.Printf("[WARN] Invalid GitHub shorthand URL for %q: %v\n", normalisedName, err)
-					continue
-				}
-
-				tag := helpers.ExtractGitTag(cleanVersion)
-				if tag == "" {
-					tag = "latest"
-				}
-				sha, err := helpers.GetSHAFromTag(repoInfo, tag, token)
-				if err != nil {
-					fmt.Printf("[WARN] Failed to resolve SHA for %q@%q: %v\n", repoInfo.FullName, tag, err)
-					continue
-				}
-
-				printResults(depType, normalisedName, tag, repoInfo.FullName, sha, token, commitsToCheck)
-				continue
-
-			default:
-				url := fmt.Sprintf("https://registry.npmjs.org/%s", normalisedName)
-				resp, err := client.DoGet(url, token)
-				if err != nil {
-					fmt.Printf("[%s] Fetch failed for %s: %v\n", depType, normalisedName, err)
-					continue
-				}
-				body, _ := io.ReadAll(resp.Body)
-				defer resp.Body.Close()
-
-				var npmResp NpmPackageResponse
-				if err := json.Unmarshal(body, &npmResp); err != nil {
-					fmt.Printf("[%s] Error parsing NPM JSON for %s: %v\n", depType, normalisedName, err)
-					continue
-				}
-
-				if kind == "tag" {
-					if tagVer, ok := npmResp.DistTags[cleanVersion]; ok {
-						resolved = tagVer
-					} else if latest, ok := npmResp.DistTags["latest"]; ok {
-						fmt.Printf("[WARN] Tag %q missing — using latest\n", cleanVersion)
-						resolved = latest
-					} else {
-						fmt.Printf("[ERROR] No version resolved for %q\n", normalisedName)
-						continue
-					}
-				}
-
-				if kind == "scoped-alias" {
-					fmt.Printf("[INFO] Scoped alias %q resolved to %q @ %q\n", version, normalisedName, cleanVersion)
-					resolved = cleanVersion
-					pkg = normalisedName
-				}
-
-				resolved = helpers.ResolveVersion(resolved, npmResp.Versions)
-				if resolved == "" {
-					switch {
-					case version == "":
-						fmt.Printf("[WARN] No version specified for %q — using latest stable version\n", pkg)
-					case version == "*" || version == "latest" || version == "X" || version == "x":
-						fmt.Printf("[INFO] %q uses wildcard: %q — resolving to latest stable version\n", pkg, version)
-					case helpers.IsValidSemver(version) && helpers.IsPrerelease(version):
-						fmt.Printf("[INFO] Requested version %q for %q is a prerelease — using latest stable version\n", version, pkg)
-					default:
-						fmt.Printf("[WARN] Could not resolve version %q for %q — falling back to latest\n", version, pkg)
-					}
-
-					if latest, ok := npmResp.DistTags["latest"]; ok {
-						resolved = latest
-					} else {
-						fmt.Printf("[ERROR] No version resolved for %q\n", pkg)
-						continue
-					}
-				}
-
-				repoURL := extractRepoURLFromNpm(npmResp)
-				if repoURL == "" {
-					fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, version)
-					continue
-				}
-
-				repoInfo, err := helpers.ExtractRepoInfo(repoURL)
-				if err != nil {
-					fmt.Printf("[WARN] Invalid repository URL for %q (%q): %v\n", pkg, version, err)
-					continue
-				}
-
-				sha, shaErr := helpers.GetSHAFromTag(repoInfo, resolved, token)
-				if shaErr != nil && !strings.HasPrefix(resolved, "v") {
-					sha, shaErr = helpers.GetSHAFromTag(repoInfo, "v"+resolved, token)
-					resolved = "v" + resolved
-				}
-				if shaErr != nil {
-					fmt.Printf("[%s] Error getting SHA for %s@%s: %v\n", depType, pkg, resolved, shaErr)
-					continue
-				}
-
-				printResults(depType, pkg, resolved, repoInfo.FullName, sha, token, config.CommitsToCheck)
-				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
-				// if err != nil {
-				// 	fmt.Println("Error checking signatures locally:", err)
-				// 	continue
-				// }
-				// outputs.PrintSignatureResults(results, "Local", config)
-
+			depResult := processJSDependency(pkg, version, token, config, timeCutoff, outputFormat)
+			if depResult != nil {
+				results = append(results, *depResult)
 			}
 		}
 	}
@@ -201,5 +61,155 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config type
 	processDeps("dependencies", packageJSON.Dependencies)
 	processDeps("devDependencies", packageJSON.DevDependencies)
 
-	return nil
+	return results, nil
+}
+
+// processJSDependency processes a single JavaScript dependency and returns a DependencyReport
+func processJSDependency(pkg, version, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	if helpers.IsTarballURL(version) || helpers.IsLocalPath(version) {
+		fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, version)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  version,
+			Manifest: "package.json",
+			Status:   "SKIPPED",
+			Issues:   []string{"Tarball or local path not supported"},
+		}
+	}
+
+	normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, version)
+
+	switch kind {
+	case "git":
+		return processGitDependency(pkg, normalisedName, cleanVersion, token, config, timeCutoff, outputFormat)
+	case "github-shorthand":
+		return processGitHubShorthand(pkg, normalisedName, cleanVersion, token, config, timeCutoff, outputFormat)
+	default:
+		return processNpmDependency(pkg, normalisedName, version, cleanVersion, token, config, timeCutoff, outputFormat)
+	}
+}
+
+func processGitDependency(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	fmt.Printf("[INFO] Git dependency for %q: %q\n", normalisedName, cleanVersion)
+	tag := helpers.ExtractGitTag(cleanVersion)
+	if tag == "" {
+		fmt.Printf("[WARN] No tag found in Git URL for %q\n", normalisedName)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  cleanVersion,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{"No tag found in Git URL"},
+		}
+	}
+
+	baseURL := strings.Split(cleanVersion, "#")[0]
+	repoInfo, err := helpers.ExtractRepoInfo(baseURL)
+	if err != nil {
+		fmt.Printf("[WARN] Invalid Git repository URL for %q: %v\n", normalisedName, err)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  cleanVersion,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{fmt.Sprintf("Invalid repository format: %v", err)},
+		}
+	}
+
+	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, tag, token, config, timeCutoff, outputFormat, "package.json")
+}
+
+func processGitHubShorthand(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
+	gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
+
+	repoInfo, err := helpers.ExtractRepoInfo(gitURL)
+	if err != nil {
+		fmt.Printf("[WARN] Invalid GitHub shorthand URL for %q: %v\n", normalisedName, err)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  cleanVersion,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{fmt.Sprintf("Invalid GitHub shorthand format: %v", err)},
+		}
+	}
+
+	tag := helpers.ExtractGitTag(cleanVersion)
+	if tag == "" {
+		tag = "latest"
+	}
+
+	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, tag, token, config, timeCutoff, outputFormat, "package.json")
+}
+
+func processNpmDependency(pkg, normalisedName, version, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	url := fmt.Sprintf("https://registry.npmjs.org/%s", normalisedName)
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		fmt.Printf("[NPM] Fetch failed for %s: %v\n", normalisedName, err)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  version,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{fmt.Sprintf("NPM fetch failed: %v", err)},
+		}
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var npmResp NpmPackageResponse
+	if err := json.Unmarshal(body, &npmResp); err != nil {
+		fmt.Printf("[NPM] Error parsing NPM JSON for %s: %v\n", normalisedName, err)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  version,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{fmt.Sprintf("NPM JSON parse failed: %v", err)},
+		}
+	}
+
+	// Resolve version
+	resolved := helpers.ResolveVersion(cleanVersion, npmResp.Versions)
+	if resolved == "" {
+		if latest, ok := npmResp.DistTags["latest"]; ok {
+			resolved = latest
+		} else {
+			return &output.DependencyReport{
+				Package:  pkg,
+				Version:  version,
+				Manifest: "package.json",
+				Status:   "ERROR",
+				Issues:   []string{"No version resolved"},
+			}
+		}
+	}
+
+	repoURL := extractRepoURLFromNpm(npmResp)
+	if repoURL == "" {
+		fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, version)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  resolved,
+			Manifest: "package.json",
+			Status:   "SKIPPED",
+			Issues:   []string{"No repository URL found"},
+		}
+	}
+
+	repoInfo, err := helpers.ExtractRepoInfo(repoURL)
+	if err != nil {
+		fmt.Printf("[WARN] Invalid repository URL for %q (%q): %v\n", pkg, version, err)
+		return &output.DependencyReport{
+			Package:  pkg,
+			Version:  resolved,
+			Manifest: "package.json",
+			Status:   "ERROR",
+			Issues:   []string{fmt.Sprintf("Invalid repository format: %v", err)},
+		}
+	}
+
+	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, resolved, token, config, timeCutoff, outputFormat, "package.json")
 }
