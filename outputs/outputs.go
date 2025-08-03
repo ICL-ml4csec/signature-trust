@@ -3,10 +3,10 @@ package outputs
 import (
 	"fmt"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 )
 
-func PrintSignatureResults(results []checksignature.SignatureCheckResult, label string, config checksignature.LocalCheckConfig) {
+func PrintSignatureResults(results []types.SignatureCheckResult, label string, config types.LocalCheckConfig) {
 	fmt.Printf("Results from %s:\n", label)
 
 	verified := 0
@@ -15,17 +15,17 @@ func PrintSignatureResults(results []checksignature.SignatureCheckResult, label 
 		include := false
 
 		switch status {
-		case string(checksignature.ValidSignature):
+		case string(types.ValidSignature):
 			include = true
-		case string(checksignature.ExpiredButValidSignature):
+		case string(types.ValidSignatureButExpiredKey):
 			include = config.AcceptExpiredKeys
-		case string(checksignature.ValidSignatureButNotCertified):
-			include = config.AcceptUncertifiedKeys
-		case string(checksignature.EmailNotMatched):
-			include = config.AcceptUntrustedSigners
-		case string(checksignature.MissingPublicKey):
+		case string(types.ValidSignatureButSignerNotCertified):
+			include = config.AcceptUncertifiedSigner
+		case string(types.EmailNotMatched):
+			include = config.AcceptEmailMismatches
+		case string(types.MissingPublicKey):
 			include = config.AcceptMissingPublicKey
-		case string(checksignature.GitHubAutomatedSignature):
+		case string(types.GitHubAutomatedSignature):
 			include = config.AcceptGitHubAutomated
 		}
 

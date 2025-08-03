@@ -280,7 +280,6 @@ func resolveExactOrComparator(requested string, versionList []string) string {
 }
 
 func FindLatestSemverTag(repo string, token string) (string, string, error) {
-
 	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", CleanGitHubURL(repo))
 	resp, err := client.DoGet(url, token)
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
@@ -107,13 +106,13 @@ func ParseRequirements(file string, token string, commitsToCheck int) error {
 		fmt.Printf("Package: %s Version: %s\n", packageName, version)
 		fmt.Printf("Repository URL: %s\n", normalisedRepo)
 
-		sha, err := helpers.GetSHAFromTag(normalisedRepo, version, token)
-		if err != nil {
-			fmt.Printf("Error getting SHA for %s@%s: %v\n\n", packageName, version, err)
-			continue
-		}
+		// sha, err := helpers.GetSHAFromTag(normalisedRepo, version, token)
+		// if err != nil {
+		// 	fmt.Printf("Error getting SHA for %s@%s: %v\n\n", packageName, version, err)
+		// 	continue
+		// }
 
-		checksignature.CheckSignature(normalisedRepo, sha, token, commitsToCheck)
+		// checksignature.CheckSignature(normalisedRepo, sha, token, commitsToCheck)
 
 		// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, token)
 		// if err != nil {

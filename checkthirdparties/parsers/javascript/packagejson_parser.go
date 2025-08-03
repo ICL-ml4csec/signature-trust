@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 	"github.com/ICL-ml4csec/msc-hmj24/client"
 	"github.com/ICL-ml4csec/msc-hmj24/outputs"
@@ -39,10 +40,10 @@ func printResults(depType, pkg, version, repo, sha, token string, commitsToCheck
 	fmt.Printf("Manifest: package.json (%s)\n", depType)
 	fmt.Printf("Package: %s Version: %s\n", pkg, version)
 	fmt.Printf("Repository URL: %s\n", repo)
-	checksignature.CheckSignature(repo, sha, token, commitsToCheck)
+	// checksignature.CheckSignature(repo, sha, token, commitsToCheck)
 }
 
-func ParsePackageJSON(file string, token string, commitsToCheck int, config checksignature.LocalCheckConfig, timeCutOff *time.Time) error {
+func ParsePackageJSON(file string, token string, commitsToCheck int, config types.LocalCheckConfig, timeCutOff *time.Time) error {
 	var packageJSON PackageJSON
 
 	data, err := os.ReadFile(file)
