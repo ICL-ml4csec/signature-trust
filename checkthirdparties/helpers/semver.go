@@ -279,8 +279,9 @@ func resolveExactOrComparator(requested string, versionList []string) string {
 	return ""
 }
 
-func FindLatestSemverTag(repo string, token string) (string, string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", CleanGitHubURL(repo))
+// FindLatestSemverTag finds latest semver tag using extracted repo info
+func FindLatestSemverTag(repoInfo *RepoInfo, token string) (string, string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoInfo.FullName)
 	resp, err := client.DoGet(url, token)
 	if err != nil {
 		return "", "", fmt.Errorf("error fetching tags: %v", err)
@@ -288,7 +289,7 @@ func FindLatestSemverTag(repo string, token string) (string, string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+		return "", "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repoInfo.FullName)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -314,7 +315,7 @@ func FindLatestSemverTag(repo string, token string) (string, string, error) {
 	}
 
 	if len(semverTags) == 0 {
-		return "", "", fmt.Errorf("no valid semver tags found for %s", repo)
+		return "", "", fmt.Errorf("no valid semver tags found for %s", repoInfo.FullName)
 	}
 
 	sort.Slice(semverTags, func(i, j int) bool {

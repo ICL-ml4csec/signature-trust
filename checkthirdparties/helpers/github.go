@@ -18,13 +18,19 @@ type GitHubTag struct {
 	} `json:"commit"`
 }
 
-func GetSHAFromTag(repoURL string, version string, token string) (string, error) {
-	repo := CleanGitHubURL(repoURL)
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repo)
+type RepoInfo struct {
+	Owner    string `json:"owner"`
+	Name     string `json:"name"`
+	FullName string `json:"full_name"`
+	URL      string `json:"url"`
+}
+
+func GetSHAFromTag(repoInfo *RepoInfo, version string, token string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoInfo.FullName)
 	resp, err := client.DoGet(url, token)
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repoInfo.FullName)
 	}
 	if err != nil {
 		return "", fmt.Errorf("error fetching tags: %v", err)
@@ -84,7 +90,10 @@ func GetSHAFromBranch(repo string, branch string, token string) (string, error) 
 	return result.SHA, nil
 }
 
-func CleanGitHubURL(url string) string {
+// ExtractRepoInfo extracts repository information from various URL formats
+func ExtractRepoInfo(url string) (*RepoInfo, error) {
+	originalURL := url
+
 	url = strings.TrimPrefix(url, "git+")
 	url = strings.TrimPrefix(url, "git://")
 	url = strings.Replace(url, "git@github.com:", "", 1)
@@ -94,6 +103,7 @@ func CleanGitHubURL(url string) string {
 	url = strings.Replace(url, "github.com/", "", 1)
 	url = strings.TrimSuffix(url, ".git")
 	url = strings.TrimSuffix(url, "/")
+
 	if idx := strings.Index(url, "#"); idx != -1 {
 		url = url[:idx]
 	}
@@ -101,7 +111,18 @@ func CleanGitHubURL(url string) string {
 	var majorVersionSuffix = regexp.MustCompile(`/v[0-9]+$`)
 	url = majorVersionSuffix.ReplaceAllString(url, "")
 
-	return url
+	// Validate and split into owner/repo
+	parts := strings.Split(url, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil, fmt.Errorf("invalid GitHub repository format: %s", originalURL)
+	}
+
+	return &RepoInfo{
+		Owner:    parts[0],
+		Name:     parts[1],
+		FullName: url,
+		URL:      originalURL,
+	}, nil
 }
 
 func ExpandGitHubShorthand(input string) string {
