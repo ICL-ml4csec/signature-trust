@@ -17,11 +17,11 @@ func fileExists(filename string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func CheckThirdPartiesWithResults(token string, config types.LocalCheckConfig, timeCutoff *time.Time) ([]output.DependencyReport, error) {
+func CheckThirdPartiesWithResults(token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
 	var results []output.DependencyReport
 
 	if fileExists("go.mod") {
-		depResults, err := goparser.ParseGoWithResults("go.mod", token, config, timeCutoff)
+		depResults, err := goparser.ParseGoWithResults("go.mod", token, config, timeCutoff, outputFormat)
 		if err != nil {
 			fmt.Printf("%v\n", err)
 			return nil, err

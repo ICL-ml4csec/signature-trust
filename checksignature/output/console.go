@@ -9,8 +9,8 @@ import (
 )
 
 // PrintRepositoryConsoleOutput prints the new formatted repository output
-func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, repo string) {
-	fmt.Printf("=== REPOSITORY SIGNATURE CHECK ===\n")
+func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, outputFormat string) {
+	fmt.Printf("\n=== REPOSITORY SIGNATURE CHECK ===\n")
 	fmt.Printf("Checking all commits for branch: %s\n", config.Branch)
 
 	// Show key age policy if configured
@@ -20,7 +20,7 @@ func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCh
 	}
 
 	fmt.Printf("\n== RESULTS ==\n")
-	fmt.Printf("Signature Check Summary (%s):\n", repo)
+	fmt.Printf("Signature Check Summary (%s):\n", config.Repo)
 	fmt.Printf("    Total commits: %d\n", summary.TotalCommits)
 	fmt.Printf("    Valid signatures: %d\n", summary.ValidSignatures)
 
@@ -41,16 +41,23 @@ func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCh
 		for category, commits := range policyRejections {
 			fmt.Printf("    - %s: %d commits\n", category, len(commits))
 
-			// Show first few commits with details
+			// Show commits with details
 			maxShow := 3
+			if outputFormat == "console" {
+				maxShow = len(commits) // Show all for console
+			}
+
 			for i, commit := range commits {
-				if i >= maxShow {
-					fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
-					break
+				if i < maxShow {
+					fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
 				}
-				fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
+			}
+
+			if len(commits) > maxShow {
+				fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
 			}
 		}
+
 	}
 
 	// Hard rejections
@@ -59,22 +66,29 @@ func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCh
 		fmt.Printf("\nHard rejections:\n")
 		for category, commits := range hardRejections {
 			fmt.Printf("    - %s: %d commits\n", category, len(commits))
-
-			// Show first few commits
+			// Show commits with details
 			maxShow := 3
+			if outputFormat == "console" {
+				maxShow = len(commits) // Show all for console
+			}
+
 			for i, commit := range commits {
-				if i >= maxShow {
-					fmt.Printf("      * ... and %d more\n", len(commits)-maxShow)
-					break
+				if i < maxShow {
+					fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
 				}
-				fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
+			}
+
+			if len(commits) > maxShow {
+				fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
 			}
 		}
 	}
+	fmt.Println()
+
 }
 
 // PrintDependencyConsoleOutput prints the formatted dependency output
-func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, manifest, packageName, version string, commitsChecked int) {
+func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, manifest, packageName, version string, commitsChecked int, outputFormat string) {
 	fmt.Printf("=== THIRD-PARTY DEPENDENCIES CHECK ===\n")
 
 	if config.CommitsToCheck == -1 {
@@ -116,15 +130,22 @@ func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCh
 		for category, commits := range policyRejections {
 			fmt.Printf("    - %s: %d commits\n", category, len(commits))
 
-			// Show first few commits with details
+			// Show commits with details
 			maxShow := 3
-			for i, commit := range commits {
-				if i >= maxShow {
-					fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
-					break
-				}
-				fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
+			if outputFormat == "console" {
+				maxShow = len(commits) // Show all for console
 			}
+
+			for i, commit := range commits {
+				if i < maxShow {
+					fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
+				}
+			}
+
+			if len(commits) > maxShow {
+				fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
+			}
+
 		}
 	}
 
@@ -135,14 +156,20 @@ func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCh
 		for category, commits := range hardRejections {
 			fmt.Printf("    - %s: %d commits\n", category, len(commits))
 
-			// Show first few commits
+			// Show commits with details
 			maxShow := 3
+			if outputFormat == "console" {
+				maxShow = len(commits) // Show all for console
+			}
+
 			for i, commit := range commits {
-				if i >= maxShow {
-					fmt.Printf("      * ... and %d more\n", len(commits)-maxShow)
-					break
+				if i < maxShow {
+					fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
 				}
-				fmt.Printf("      * %s: %s\n", commit.SHA, commit.Description)
+			}
+
+			if len(commits) > maxShow {
+				fmt.Printf("      * ... and %d more (see JSON report for full details)\n", len(commits)-maxShow)
 			}
 		}
 	}
@@ -195,20 +222,6 @@ func PrintSecurityAnomalyDetection(contributors map[string]ContributorAnalysis) 
 	if normalContributors > 0 {
 		fmt.Printf(" %d other contributors with normal key patterns\n", normalContributors)
 	}
-}
-
-type CommitFailure struct {
-	SHA         string
-	Description string
-}
-
-type ContributorAnalysis struct {
-	Username           string
-	TotalKeys          int
-	RecentKeysCount    int
-	RecentKeysDays     int
-	CommitsWithNewKeys int
-	LastCommitDate     time.Time
 }
 
 func getPolicyDependentRejections(summary SignatureSummary, config types.LocalCheckConfig) map[string][]CommitFailure {
