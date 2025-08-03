@@ -70,32 +70,43 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config type
 					continue
 				}
 				baseURL := strings.Split(cleanVersion, "#")[0]
-				repo := helpers.CleanGitHubURL(baseURL)
 
-				sha, err := helpers.GetSHAFromTag(repo, tag, token)
+				repoInfo, err := helpers.ExtractRepoInfo(baseURL)
 				if err != nil {
-					fmt.Printf("[WARN] Failed to resolve SHA for tag %q in %q: %v\n", tag, repo, err)
+					fmt.Printf("[WARN] Invalid Git repository URL for %q: %v\n", normalisedName, err)
 					continue
 				}
 
-				printResults(depType, pkg, tag, repo, sha, token, commitsToCheck)
+				sha, err := helpers.GetSHAFromTag(repoInfo, tag, token)
+				if err != nil {
+					fmt.Printf("[WARN] Failed to resolve SHA for tag %q in %q: %v\n", tag, repoInfo.FullName, err)
+					continue
+				}
+
+				printResults(depType, pkg, tag, repoInfo.FullName, sha, token, commitsToCheck)
 				continue
 
 			case "github-shorthand":
 				fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
 				gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
-				repo := helpers.CleanGitHubURL(gitURL)
+
+				repoInfo, err := helpers.ExtractRepoInfo(gitURL)
+				if err != nil {
+					fmt.Printf("[WARN] Invalid GitHub shorthand URL for %q: %v\n", normalisedName, err)
+					continue
+				}
+
 				tag := helpers.ExtractGitTag(cleanVersion)
 				if tag == "" {
 					tag = "latest"
 				}
-				sha, err := helpers.GetSHAFromTag(repo, tag, token)
+				sha, err := helpers.GetSHAFromTag(repoInfo, tag, token)
 				if err != nil {
-					fmt.Printf("[WARN] Failed to resolve SHA for %q@%q: %v\n", repo, tag, err)
+					fmt.Printf("[WARN] Failed to resolve SHA for %q@%q: %v\n", repoInfo.FullName, tag, err)
 					continue
 				}
 
-				printResults(depType, normalisedName, tag, repo, sha, token, commitsToCheck)
+				printResults(depType, normalisedName, tag, repoInfo.FullName, sha, token, commitsToCheck)
 				continue
 
 			default:
@@ -154,16 +165,20 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config type
 				}
 
 				repoURL := extractRepoURLFromNpm(npmResp)
-
-				normalisedRepo := helpers.CleanGitHubURL(repoURL)
-				if normalisedRepo == "" {
+				if repoURL == "" {
 					fmt.Printf("[WARN] No repository URL found for %q (%q)\n", pkg, version)
 					continue
 				}
 
-				sha, shaErr := helpers.GetSHAFromTag(normalisedRepo, resolved, token)
+				repoInfo, err := helpers.ExtractRepoInfo(repoURL)
+				if err != nil {
+					fmt.Printf("[WARN] Invalid repository URL for %q (%q): %v\n", pkg, version, err)
+					continue
+				}
+
+				sha, shaErr := helpers.GetSHAFromTag(repoInfo, resolved, token)
 				if shaErr != nil && !strings.HasPrefix(resolved, "v") {
-					sha, shaErr = helpers.GetSHAFromTag(normalisedRepo, "v"+resolved, token)
+					sha, shaErr = helpers.GetSHAFromTag(repoInfo, "v"+resolved, token)
 					resolved = "v" + resolved
 				}
 				if shaErr != nil {
@@ -171,8 +186,7 @@ func ParsePackageJSON(file string, token string, commitsToCheck int, config type
 					continue
 				}
 
-				printResults(depType, pkg, resolved, normalisedRepo, sha, token, config.CommitsToCheck)
-
+				printResults(depType, pkg, resolved, repoInfo.FullName, sha, token, config.CommitsToCheck)
 				// results, err := checksignature.CheckSignatureLocal(normalisedRepo, sha, config)
 				// if err != nil {
 				// 	fmt.Println("Error checking signatures locally:", err)

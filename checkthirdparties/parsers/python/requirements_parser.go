@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
 	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
@@ -100,11 +99,11 @@ func ParseRequirements(file string, token string, commitsToCheck int) error {
 			continue
 		}
 
-		normalisedRepo := helpers.CleanGitHubURL(repoURL)
+		// normalisedRepo := helpers.CleanGitHubURL(repoURL)
 
-		fmt.Printf("Manifest: requirements.txt\n")
-		fmt.Printf("Package: %s Version: %s\n", packageName, version)
-		fmt.Printf("Repository URL: %s\n", normalisedRepo)
+		// fmt.Printf("Manifest: requirements.txt\n")
+		// fmt.Printf("Package: %s Version: %s\n", packageName, version)
+		// fmt.Printf("Repository URL: %s\n", normalisedRepo)
 
 		// sha, err := helpers.GetSHAFromTag(normalisedRepo, version, token)
 		// if err != nil {
