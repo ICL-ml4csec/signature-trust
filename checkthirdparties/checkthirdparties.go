@@ -5,7 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	goparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/go"
 	// jsparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/javascript"
 	// pyparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/python"
@@ -16,26 +17,18 @@ func fileExists(filename string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func CheckThirdParties(token string, config checksignature.LocalCheckConfig, timeCutoff *time.Time) {
+func CheckThirdPartiesWithResults(token string, config types.LocalCheckConfig, timeCutoff *time.Time) ([]output.DependencyReport, error) {
+	var results []output.DependencyReport
+
 	if fileExists("go.mod") {
-		if err := goparser.ParseGo("go.mod", token, config, timeCutoff); err != nil {
+		depResults, err := goparser.ParseGoWithResults("go.mod", token, config, timeCutoff)
+		if err != nil {
 			fmt.Printf("%v\n", err)
+			return nil, err
 		}
+		results = append(results, depResults...)
+
 	}
 
-	// if helpers.FileExists("requirements.txt") {
-	// 	if err := pyparser.ParseRequirements("requirements.txt", token, config.CommitsToCheck); err != nil {
-	// 		fmt.Printf("%v\n", err)
-	// 	}
-	// }
-	// if helpers.FileExists("package.json") {
-	// 	if err := jsparser.ParsePackageJSON("package.json", token, config.CommitsToCheck, config); err != nil {
-	// 		fmt.Printf("%v\n", err)
-	// 	}
-	// }
-
-	// Future manifest files here:
-	// if fileExists("package.json") {...}
-	// if fileExists("cargo.toml") {...}
-	// if fileExists("pom.xml") {...}
+	return results, nil
 }

@@ -70,8 +70,8 @@ The program will
 
    * `CommitsToCheck`: number of commits to check (e.g. 30 or "all")
    * `AcceptExpiredKeys`: true/false
-   * `AcceptUntrustedSigners`: true/false
-   * `AcceptUncertifiedKeys`: true/false
+   * `AcceptEmailMismatches`: true/false
+   * `AcceptUncertifiedSigner`: true/false
    * `AcceptMissingPublicKey`: true/false
 
 2. Parse `go.mod`, `requirements.txt`, and `package.json` (if present), resolve each dependency’s tag → commit SHA, then print the percentage of signed commits for the most recent `n` commits on that SHA’s branch.
