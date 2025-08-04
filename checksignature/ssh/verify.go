@@ -14,10 +14,14 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
-// computeSignedPayload computes the SSH signed payload for verification
+// computeSignedPayload constructs the SSH payload to verify against the signature,
+// following the OpenSSH SSHSIG payload structure:
+// "SSHSIG" || namespace || reserved || hash_algorithm || hashed_commit
 func computeSignedPayload(content, namespace, hashAlgorithm string) ([]byte, error) {
+	// Strip the gpgsig block from the commit to get the clean message
 	cleanCommit := utils.RemoveSignatureFromCommit(content)
 
+	// Select hashing algorithm
 	var hasher hash.Hash
 	switch hashAlgorithm {
 	case "sha256":
@@ -31,6 +35,7 @@ func computeSignedPayload(content, namespace, hashAlgorithm string) ([]byte, err
 	hasher.Write([]byte(cleanCommit))
 	messageHash := hasher.Sum(nil)
 
+	// Build payload according to SSHSIG spec
 	var payload bytes.Buffer
 
 	payload.WriteString("SSHSIG")
@@ -120,12 +125,11 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 		return types.VerificationError, fmt.Sprintf("Unknown SSH key type: %s", keyType), nil
 	}
 
-	// Check email/identity matching for valid signatures
+	// For valid signatures, ensure signer identity matches author (except security keys)
 	if status == types.ValidSignature {
 		signerIdentity := sshSig.IdentityComment
 		isSecurityKey := strings.Contains(keyType, "sk-")
 
-		// Skip email check for security keys (hardware-bound, different threat model)
 		if !isSecurityKey && signerIdentity != "" {
 			mismatch, signerEmail, authorEmail := utils.CheckEmailMismatch(raw, output)
 			if mismatch {

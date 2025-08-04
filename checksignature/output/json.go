@@ -10,7 +10,7 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 )
 
-// HandleJSONOutput generates comprehensive JSON report
+// HandleJSONOutput writes or prints a JSON report of signature verification results.
 func HandleJSONOutput(summary SignatureSummary, config types.LocalCheckConfig, results []SignatureCheckResult, outputFile, context string) error {
 	jsonData, err := ToJSON(summary, config, results)
 	if err != nil {
@@ -27,7 +27,7 @@ func HandleJSONOutput(summary SignatureSummary, config types.LocalCheckConfig, r
 	}
 }
 
-// ToJSON converts a SignatureSummary to a comprehensive JSON report
+// ToJSON builds a full JSON report structure from signature verification results.
 func ToJSON(summary SignatureSummary, config types.LocalCheckConfig, results []SignatureCheckResult) ([]byte, error) {
 	report := &JSONReport{
 		Metadata: ReportMetadata{
@@ -85,7 +85,7 @@ func SaveJSON(summary SignatureSummary, config types.LocalCheckConfig, results [
 	return writeToFile(filename, jsonData)
 }
 
-// buildPolicyConfiguration creates the policy section
+// BuildPolicyConfiguration creates the policy section
 func BuildPolicyConfiguration(config types.LocalCheckConfig) PolicyConfiguration {
 	policy := PolicyConfiguration{
 		AcceptExpiredKeys:       config.AcceptExpiredKeys,
@@ -99,7 +99,7 @@ func BuildPolicyConfiguration(config types.LocalCheckConfig) PolicyConfiguration
 	return policy
 }
 
-// buildSignatureAnalysis creates the summary analysis
+// BuildSignatureAnalysis creates the summary analysis
 func BuildSignatureAnalysis(summary SignatureSummary, results []SignatureCheckResult) SummaryStats {
 	return SummaryStats{
 		TotalCommits:     summary.TotalCommits,
@@ -111,7 +111,7 @@ func BuildSignatureAnalysis(summary SignatureSummary, results []SignatureCheckRe
 	}
 }
 
-// buildCommitAnalysis creates detailed commit analysis
+// BuildCommitAnalysis creates detailed commit analysis
 func BuildCommitAnalysis(results []SignatureCheckResult) []CommitAnalysis {
 	var commits []CommitAnalysis
 
@@ -131,33 +131,34 @@ func BuildCommitAnalysis(results []SignatureCheckResult) []CommitAnalysis {
 		}
 
 		switch result.Status {
-		case "valid":
+		case types.ValidSignature:
+			// No flags needed for fully valid
 
-		case "valid-but-expired-key":
+		case types.ValidSignatureButExpiredKey:
 			commit.SecurityFlags = append(commit.SecurityFlags, "expired_key")
 
-		case "valid-but-not-certified":
+		case types.ValidSignatureButSignerNotCertified:
 			commit.SecurityFlags = append(commit.SecurityFlags, "uncertified_key")
 
-		case "valid-but-key-not-on-github":
+		case types.ValidSignatureButUnregisteredKey:
 			commit.SecurityFlags = append(commit.SecurityFlags, "unregistered_key")
 
-		case "github-automated-signature":
+		case types.GitHubAutomatedSignature:
 			commit.SecurityFlags = append(commit.SecurityFlags, "github_automated_signature")
 
-		case "signed-but-untrusted-email":
+		case types.EmailNotMatched:
 			commit.SecurityFlags = append(commit.SecurityFlags, "email_mismatch")
 
-		case "signed-but-missing-key":
+		case types.MissingPublicKey:
 			commit.SecurityFlags = append(commit.SecurityFlags, "missing_public_key")
 
-		case "unsigned":
+		case types.UnsignedCommit:
 			commit.SecurityFlags = append(commit.SecurityFlags, "no_signature")
 
-		case "invalid":
+		case types.InvalidSignature:
 			commit.SecurityFlags = append(commit.SecurityFlags, "invalid_signature")
 
-		case "error":
+		case types.VerificationError:
 			commit.SecurityFlags = append(commit.SecurityFlags, "verification_error")
 
 		default:
@@ -175,7 +176,7 @@ func writeToFile(filename string, data []byte) error {
 	return os.WriteFile(filename, data, 0644)
 }
 
-// HandleCombinedJSONOutput generates a combined JSON report for both repository and dependencies
+// HandleCombinedJSONOutput generates and saves a combined report of repository and dependency analysis.
 func HandleCombinedJSONOutput(
 	repoSummary SignatureSummary,
 	repoConfig types.LocalCheckConfig,
@@ -199,7 +200,7 @@ func HandleCombinedJSONOutput(
 	}
 }
 
-// ToCombinedJSON creates a comprehensive JSON report combining repository and dependency analysis
+// ToCombinedJSON merges repository and dependency results into a single JSON report.
 func ToCombinedJSON(
 	repoSummary SignatureSummary,
 	repoConfig types.LocalCheckConfig,

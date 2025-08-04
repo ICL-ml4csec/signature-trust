@@ -6,4 +6,3 @@ COPY . .
 RUN go build -v -o /entrypoint
 
 ENTRYPOINT ["/entrypoint"]
-CMD []

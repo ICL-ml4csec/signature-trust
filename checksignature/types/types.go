@@ -5,18 +5,19 @@ import "time"
 type SignatureStatus string
 
 const (
-	ValidSignature                      SignatureStatus = "valid"
-	ValidSignatureButExpiredKey         SignatureStatus = "valid-but-expired-key"
-	ValidSignatureButSignerNotCertified SignatureStatus = "valid-but-not-certified"
-	ValidSignatureButUnregisteredKey    SignatureStatus = "valid-but-key-not-on-github"
-	GitHubAutomatedSignature            SignatureStatus = "github-automated-signature"
-	EmailNotMatched                     SignatureStatus = "signed-but-untrusted-email"
-	MissingPublicKey                    SignatureStatus = "signed-but-missing-key"
-	UnsignedCommit                      SignatureStatus = "unsigned"
-	InvalidSignature                    SignatureStatus = "invalid"
-	VerificationError                   SignatureStatus = "error"
+	ValidSignature                      SignatureStatus = "valid"                       // Cryptographically valid and fully trusted
+	ValidSignatureButExpiredKey         SignatureStatus = "valid-but-expired-key"       // Signature valid but key is expired
+	ValidSignatureButSignerNotCertified SignatureStatus = "valid-but-not-certified"     // Signature valid but signer lacks certification
+	ValidSignatureButUnregisteredKey    SignatureStatus = "valid-but-key-not-on-github" // Signature valid but key not linked to GitHub account
+	GitHubAutomatedSignature            SignatureStatus = "github-automated-signature"  // Valid GitHub automated commit
+	EmailNotMatched                     SignatureStatus = "signed-but-untrusted-email"  // Signer's email doesn't match commit author
+	MissingPublicKey                    SignatureStatus = "signed-but-missing-key"      // Cannot find public key for verification
+	UnsignedCommit                      SignatureStatus = "unsigned"                    // No signature found in commit
+	InvalidSignature                    SignatureStatus = "invalid"                     // Signature found but cryptographically invalid
+	VerificationError                   SignatureStatus = "error"                       // Internal or parsing error during verification
 )
 
+// LocalCheckConfig defines trust policy and verification options for signature checks
 type LocalCheckConfig struct {
 	Branch                  string
 	Token                   string
@@ -35,6 +36,7 @@ type LocalCheckConfig struct {
 	OriginalKeyPeriod       string
 }
 
+// GitHubGPGKey represents a GPG key retrieved from the GitHub API
 type GitHubGPGKey struct {
 	ID           int         `json:"id"`
 	PrimaryKeyID interface{} `json:"primary_key_id"`
@@ -64,6 +66,7 @@ type GitHubGPGKey struct {
 	ExpiresAt         *time.Time `json:"expires_at"`
 }
 
+// SSHSignatureData holds parsed information extracted from a commit's SSH signature
 type SSHSignatureData struct {
 	ArmoredSignature string
 	SignatureBlob    []byte
@@ -74,14 +77,7 @@ type SSHSignatureData struct {
 	IdentityComment  string
 }
 
-type KeyAnalysisResult struct {
-	Username        string
-	KeyCount        int
-	RecentKeys      []GitHubUserKey
-	OldKeys         []GitHubUserKey
-	TotalSuspicious int
-}
-
+// GitHubUserKey represents a user's SSH signing key fetched from the GitHub API
 type GitHubUserKey struct {
 	ID          int       `json:"id"`
 	Key         string    `json:"key"`

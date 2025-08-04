@@ -21,7 +21,7 @@ type GitHubTag struct {
 type RepoInfo struct {
 	Owner    string `json:"owner"`
 	Name     string `json:"name"`
-	FullName string `json:"full_name"`
+	FullName string `json:"full_name"` // e.g., "owner/repo"
 	URL      string `json:"url"`
 }
 
@@ -96,6 +96,7 @@ func GetSHAFromBranch(repo string, branch string, token string) (string, error) 
 func ExtractRepoInfo(url string) (*RepoInfo, error) {
 	originalURL := url
 
+	// Normalize GitHub URL by removing prefixes, suffixes, and fragments
 	url = strings.TrimPrefix(url, "git+")
 	url = strings.TrimPrefix(url, "git://")
 	url = strings.Replace(url, "git@github.com:", "", 1)

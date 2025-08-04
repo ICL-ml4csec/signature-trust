@@ -8,10 +8,13 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
 )
 
-// CheckKeyAuthorization verifies if a GPG key is registered on the commit author's GitHub account
+// CheckKeyAuthorization verifies if a GPG key is registered on the commit author's GitHub account.
+// This ensures the signer is actually the expected contributor, not just someone with a valid key.
 func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 	if token == "" {
-		return true, fmt.Errorf("no GitHub token provided, skipping GPG key authorization")
+		// If no GitHub token is provided, skip the authorization check.
+		// We return true to avoid failing valid commits, but raise a warning.
+		return true, fmt.Errorf("warning: no GitHub token provided, skipping GPG key authorization")
 	}
 
 	username, err := github.GetCommitContributor(repo, commitSHA, token)
@@ -24,7 +27,8 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 		return false, fmt.Errorf("failed to get user GPG keys: %v", err)
 	}
 
-	// Check if signing key matches any of their registered keys (including subkeys)
+	// Check if the provided signing key ID matches any registered GPG keys or subkeys
+	// on the GitHub account of the commit author.
 	for _, key := range gpgKeys {
 		// Check primary key
 		primaryKeyID := utils.InterfaceToString(key.PrimaryKeyID)
@@ -33,7 +37,7 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 			return true, nil
 		}
 
-		// Check subkeys
+		// Subkeys may also be authorized signers if they have signing capability
 		for _, subkey := range key.Subkeys {
 			subkeyPrimaryID := utils.InterfaceToString(subkey.PrimaryKeyID)
 			if subkey.CanSign && (utils.NormalizeKeyID(subkey.KeyID) == utils.NormalizeKeyID(keyID) ||
@@ -46,15 +50,19 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 	return false, nil
 }
 
-// ValidateAuthorization checks if GPG key belongs to the commit author on GitHub
+// ValidateAuthorization checks if a GPG signature came from a key that is registered
+// on the commit author's GitHub account. This adds an authorization layer on top of cryptographic validation.
 func ValidateAuthorization(keyID, repo, commitSHA, token string) (types.SignatureStatus, string, error) {
 	authorized, authErr := CheckKeyAuthorization(keyID, repo, commitSHA, token)
 	if authErr != nil {
-		// Log warning but don't fail
+		// If authorization check fails
+		// treat signature as valid but return a warning.
 		return types.ValidSignature, fmt.Sprintf("Warning: Could not verify GPG key authorization: %v", authErr), nil
 	}
 
 	if !authorized {
+		// If the key is valid cryptographically but not registered on GitHub,
+		// mark it as a valid signature from an unregistered key.
 		return types.ValidSignatureButUnregisteredKey,
 			fmt.Sprintf("Valid GPG signature with key %s, but key is not registered on the commit author's GitHub account", keyID), nil
 	}

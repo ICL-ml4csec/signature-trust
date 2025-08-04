@@ -20,6 +20,7 @@ func GetUserGPGKeys(username, token string) ([]types.GitHubGPGKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
+		// No keys found for user – treat as non-error
 		return []types.GitHubGPGKey{}, nil
 	}
 
@@ -68,11 +69,13 @@ func fetchUserKeys(url, token string) ([]types.GitHubUserKey, error) {
 		return nil, err
 	}
 
-	// Compute fingerprints for keys that don't have them
+	// GitHub sometimes omits the fingerprint field.
+	// Compute it manually for consistency in downstream verification.
 	for i := range keys {
 		if keys[i].Key != "" && keys[i].Fingerprint == "" {
 			fingerprint, err := utils.ComputeFingerprintFlexible(keys[i].Key)
 			if err != nil {
+				// Skip keys we can't fingerprint
 				continue
 			}
 			keys[i].Fingerprint = fingerprint

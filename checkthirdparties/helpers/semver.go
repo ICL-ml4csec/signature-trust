@@ -14,7 +14,7 @@ import (
 
 // IsValidSemver checks if a string is a valid semantic version
 func IsValidSemver(version string) bool {
-	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-sA-s\-\.]+)?(?:\+[\da-sA-s\-\.]+)?$`)
+	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z\-\.]+)?(?:\+[\da-zA-Z\-\.]+)?$`)
 	return semverRegex.MatchString(version)
 }
 
@@ -124,8 +124,8 @@ func applyComparator(cmp string, versions []string) []string {
 	return result
 }
 
-// normaliseUpperLimit creates an exclusive upper bound version for range operations
-func normaliseUpperLimit(v string) string {
+// normalizeUpperLimit creates an exclusive upper bound version for range operations
+func normalizeUpperLimit(v string) string {
 	parts := strings.Split(v, ".")
 	switch len(parts) {
 	case 1:
@@ -173,7 +173,7 @@ func resolveHyphenRange(requested string, versionList []string) string {
 		return ""
 	}
 	lower := strings.TrimSpace(parts[0])
-	upper := normaliseUpperLimit(strings.TrimSpace(parts[1]))
+	upper := normalizeUpperLimit(strings.TrimSpace(parts[1]))
 	for i := len(versionList) - 1; i >= 0; i-- {
 		v := versionList[i]
 		if !semverLess(v, lower) && semverLess(v, upper) {

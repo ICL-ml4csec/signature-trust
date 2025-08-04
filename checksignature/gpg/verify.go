@@ -78,7 +78,8 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 	return status, output, verifyErr
 }
 
-// performGPGVerification handles the actual GPG command execution
+// performGPGVerification runs `gpg --verify` on the extracted payload and signature.
+// It creates temporary files for compatibility with gpg CLI, then parses the result.
 func performGPGVerification(signature, payload string) (types.SignatureStatus, string, error) {
 	// Create temporary files for signature and payload
 	sigFile, err := os.CreateTemp("", "*.sig")

@@ -71,7 +71,7 @@ func main() {
 	if originalTimePeriod != "" {
 
 		if strings.ToLower(commitsArg) != "all" {
-			fmt.Printf("Warning: When using lookback duration, commits parameter should be 'all'. Using 'all' instead of '%s'\n", commitsArg)
+			fmt.Printf("Warning: When using time-range duration, commits parameter should be 'all'. Using 'all' instead of '%s'\n", commitsArg)
 		}
 
 		commitsToCheck = -1
@@ -142,6 +142,8 @@ func main() {
 		AcceptUnregisteredKeys:  repoPolicy.AcceptUnregisteredKeys,
 		TimeCutoff:              nil,
 		KeyCreationCutoff:       keyCreationTimeCutoff,
+		OriginalTimePeriod:      originalTimePeriod,
+		OriginalKeyPeriod:       originalKeyPeriod,
 	}
 
 	depsConfig := types.LocalCheckConfig{
@@ -188,6 +190,30 @@ func main() {
 		if err := output.HandleCombinedJSONOutput(summary, repoConfig, results, dependencyResults, outputFile); err != nil {
 			fmt.Printf("Failed to generate combined JSON output: %v\n", err)
 		}
+	}
+
+	repoFailed := summary.RejectedByPolicy > 0
+
+	depsFailed := false
+	for _, dep := range dependencyResults {
+		if dep.Status == "FAILED" {
+			depsFailed = true
+			break
+		}
+	}
+
+	if repoFailed || depsFailed {
+		fmt.Printf("\n❌ Signature verification failed\n")
+		if repoFailed {
+			fmt.Printf("  - Repository: %d commits rejected by policy\n", summary.RejectedByPolicy)
+		}
+		if depsFailed {
+			fmt.Printf("  - Dependencies: Some dependencies failed policy checks\n")
+		}
+		os.Exit(1)
+	} else {
+		fmt.Printf("\n✅ All signature checks passed\n")
+		os.Exit(0)
 	}
 
 }

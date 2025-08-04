@@ -54,26 +54,6 @@ func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([
 	return results, nil
 }
 
-// CheckAndReportSignatures performs verification and generates a report
-func CheckAndReportSignatures(repoPath string, config types.LocalCheckConfig) error {
-	results, err := CheckSignatureLocal(repoPath, "", config)
-	if err != nil {
-		return fmt.Errorf("failed to check signatures: %v", err)
-	}
-
-	summary := ProcessSignatureResults(results, config)
-
-	// Use new console output format
-	output.PrintRepositoryConsoleOutput(summary, config, repoPath)
-
-	// Return error if any commits were rejected by policy
-	if summary.RejectedByPolicy > 0 {
-		return fmt.Errorf("%d commits rejected by signature policy", summary.RejectedByPolicy)
-	}
-
-	return nil
-}
-
 // determineBranch determines which branch to check
 func determineBranch(tmpDir, configBranch string) string {
 	branchToUse := configBranch
@@ -137,7 +117,7 @@ func verifyCommitSignature(tmpDir, commitSHA string, config types.LocalCheckConf
 	if catErr != nil {
 		return output.SignatureCheckResult{
 			CommitSHA: commitSHA,
-			Status:    string(types.VerificationError),
+			Status:    types.VerificationError,
 			Output:    string(catOut),
 			Err:       catErr,
 		}
@@ -226,45 +206,45 @@ func determineSignatureStatus(
 
 	return output.SignatureCheckResult{
 		CommitSHA:           commitSHA,
-		Status:              string(status),
+		Status:              status,
 		Output:              rawOutput,
 		Err:                 err,
 		Author:              author,
 		Timestamp:           timestamp,
-		AcceptedByPolicy:    applyPolicy(string(status), config),
-		HardPolicyViolation: isHardRejection(string(status), config),
+		AcceptedByPolicy:    applyPolicy(status, config),
+		HardPolicyViolation: isHardRejection(status, config),
 	}
 
 }
 
 // applyPolicy checks if a signature status is acceptable based on the policy configuration
-func applyPolicy(status string, config types.LocalCheckConfig) bool {
+func applyPolicy(status types.SignatureStatus, config types.LocalCheckConfig) bool {
 	switch status {
-	case "valid":
+	case types.ValidSignature:
 		return true
 
-	case "github-automated-signature":
+	case types.GitHubAutomatedSignature:
 		return config.AcceptGitHubAutomated
 
-	case "unsigned":
+	case types.UnsignedCommit:
 		return config.AcceptUnsignedCommits
 
-	case "signed-but-missing-key":
+	case types.MissingPublicKey:
 		return config.AcceptMissingPublicKey
 
-	case "valid-but-expired-key":
+	case types.ValidSignatureButExpiredKey:
 		return config.AcceptExpiredKeys
 
-	case "valid-but-not-certified":
+	case types.ValidSignatureButSignerNotCertified:
 		return config.AcceptUncertifiedSigner
 
-	case "valid-but-untrusted-email":
+	case types.EmailNotMatched:
 		return config.AcceptEmailMismatches
 
-	case "valid-but-key-not-on-github":
+	case types.ValidSignatureButUnregisteredKey:
 		return config.AcceptUnregisteredKeys
 
-	case "invalid", "error":
+	case types.InvalidSignature, types.VerificationError:
 		return false
 
 	default:
@@ -273,7 +253,7 @@ func applyPolicy(status string, config types.LocalCheckConfig) bool {
 }
 
 // isHardRejection checks if a commit's status is a hard rejection based on policy
-func isHardRejection(status string, config types.LocalCheckConfig) bool {
+func isHardRejection(status types.SignatureStatus, config types.LocalCheckConfig) bool {
 	// A hard rejection occurs when a commit fails and is NOT allowed by policy
 	return !applyPolicy(status, config)
 }
@@ -311,13 +291,13 @@ func ProcessSignatureResults(results []output.SignatureCheckResult, config types
 		ValidSignatures:  0,
 		AcceptedByPolicy: 0,
 		RejectedByPolicy: 0,
-		StatusBreakdown:  make(map[string]int),
+		StatusBreakdown:  make(map[types.SignatureStatus]int),
 		FailedCommits:    []string{},
 	}
 
 	for _, result := range results {
 		status := types.SignatureStatus(result.Status)
-		summary.StatusBreakdown[result.Status]++
+		summary.StatusBreakdown[status]++
 
 		acceptable, reason := IsSignatureAcceptable(status, config)
 
