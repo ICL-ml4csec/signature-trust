@@ -18,9 +18,18 @@ jobs:
         with:
           go-version: "1.23"
 
+      - name: Set branch name
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
       - name: Verify Signatures
         run: |
-          go run ./main.go ${{ github.repository }} ${{ github.ref_name }} ${{ secrets.GITHUB_TOKEN }} \
+          echo "Checking branch: $BRANCH_NAME"
+          go run ./main.go ${{ github.repository }} $BRANCH_NAME ${{ secrets.GITHUB_TOKEN }} \
             all "6 months" "" \
             "false:false:false:false:true:false:false" \
             "true:true:true:true:true:false:false" \
