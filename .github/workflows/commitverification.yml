@@ -21,7 +21,7 @@ jobs:
       - name: Verify Signatures
         run: |
           go run ./main.go ${{ github.repository }} ${{ github.ref_name }} ${{ secrets.GITHUB_TOKEN }} \
-            all "6 months" "1 week" \
+            all "6 months" "" \
             "false:false:false:false:true:false:false" \
             "true:true:true:true:true:false:false" \
             json signature-report.json
