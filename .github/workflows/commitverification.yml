@@ -18,13 +18,41 @@ jobs:
         with:
           go-version: "1.23"
 
+      - name: Import GPG keys from GitHub
+        run: |
+          # Get GPG keys for contributors from GitHub
+          curl -s "https://api.github.com/users/hannajonsd/gpg_keys" | jq -r '.[].raw_key' | gpg --import
+          # Add other contributors as needed
+
+          gpg --list-keys
+
+      - name: Set branch name
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
       - name: Verify Signatures
         run: |
-          go run ./main.go ${{ github.repository }} ${{ github.ref_name }} ${{ secrets.GITHUB_TOKEN }} \
+          echo "Checking branch: $BRANCH_NAME"
+          go run ./main.go ${{ github.repository }} $BRANCH_NAME ${{ secrets.GITHUB_TOKEN }} \
             all "6 months" "" \
             "false:false:false:false:true:false:false" \
             "true:true:true:true:true:false:false" \
             json signature-report.json
+
+      - name: Display signature report
+        if: always()
+        run: |
+          if [ -f signature-report.json ]; then
+            echo "=== SIGNATURE REPORT DETAILS ==="
+            cat signature-report.json | jq '.' || cat signature-report.json
+          else
+            echo "signature-report.json not found"
+            ls -la
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

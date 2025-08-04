@@ -1,18 +1,124 @@
 package gpg
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
+	"github.com/ICL-ml4csec/msc-hmj24/client"
 	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
-// Verify performs complete GPG signature verification
-func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.SignatureStatus, string, error) {
+// GitHubCommitVerification represents GitHub's verification status
+type GitHubCommitVerification struct {
+	Verified  bool   `json:"verified"`
+	Reason    string `json:"reason"`
+	Signature string `json:"signature"`
+	Payload   string `json:"payload"`
+}
+
+// GitHubCommitData represents commit data from GitHub API
+type GitHubCommitData struct {
+	SHA    string `json:"sha"`
+	Commit struct {
+		Verification GitHubCommitVerification `json:"verification"`
+		Message      string                   `json:"message"`
+		Author       struct {
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"author"`
+	} `json:"commit"`
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
+}
+
+// VerifyWithGitHubAPI uses GitHub's API to check signature verification
+func VerifyWithGitHubAPI(repo, sha, token string) (types.SignatureStatus, string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, sha)
+
+	resp, err := client.DoGet(url, token)
+	if err != nil {
+		return types.VerificationError, "", fmt.Errorf("failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return types.VerificationError, "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var commitData GitHubCommitData
+	if err := json.NewDecoder(resp.Body).Decode(&commitData); err != nil {
+		return types.VerificationError, "", fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	return classifyGitHubVerification(commitData.Commit.Verification)
+}
+
+// classifyGitHubVerification maps GitHub's verification reasons to our types
+func classifyGitHubVerification(verification GitHubCommitVerification) (types.SignatureStatus, string, error) {
+	if verification.Verified {
+		return types.ValidSignature, "GitHub verified signature", nil
+	}
+
+	reason := strings.ToLower(verification.Reason)
+	output := fmt.Sprintf("GitHub verification failed: %s", verification.Reason)
+
+	switch reason {
+	case "unsigned":
+		return types.UnsignedCommit, output, nil
+	case "gpgverify_unknown_public_key":
+		return types.MissingPublicKey, output, nil
+	case "gpgverify_unverified_email":
+		return types.EmailNotMatched, output, nil
+	case "gpgverify_unavailable":
+		return types.VerificationError, output, nil
+	case "bad_email":
+		return types.EmailNotMatched, output, nil
+	case "unverified_email":
+		return types.EmailNotMatched, output, nil
+	case "no_user":
+		return types.ValidSignatureButUnregisteredKey, output, nil
+	case "unknown_signature_type":
+		return types.InvalidSignature, output, nil
+	case "malformed_signature":
+		return types.InvalidSignature, output, nil
+	default:
+		return types.VerificationError, output, nil
+	}
+}
+
+// HybridVerify combines GitHub API verification with local GPG as fallback
+func HybridVerify(raw []byte, sha string, config types.LocalCheckConfig) (types.SignatureStatus, string, error) {
+	// First try GitHub API verification
+	if config.Token != "" && config.Repo != "" && sha != "" {
+		githubStatus, githubOutput, githubErr := VerifyWithGitHubAPI(config.Repo, sha, config.Token)
+
+		// If GitHub verification succeeds, use it
+		if githubErr == nil && (githubStatus == types.ValidSignature || githubStatus == types.UnsignedCommit) {
+			return githubStatus, fmt.Sprintf("GitHub API: %s", githubOutput), nil
+		}
+
+		// If GitHub verification fails but provides useful info, use it for some cases
+		if githubErr == nil {
+			switch githubStatus {
+			case types.MissingPublicKey, types.EmailNotMatched, types.InvalidSignature:
+				return githubStatus, fmt.Sprintf("GitHub API: %s", githubOutput), nil
+			}
+		}
+	}
+
+	// Fallback to local GPG verification
+	return performGPGVerification(raw, sha, config)
+}
+
+// performGPGVerification handles local GPG verification as fallback
+func performGPGVerification(raw []byte, sha string, config types.LocalCheckConfig) (types.SignatureStatus, string, error) {
 	content := string(raw)
 
 	// Extract the PGP signature and payload from the commit content
@@ -42,46 +148,7 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 		}
 	}
 
-	// Perform GPG verification
-	status, output, verifyErr := performGPGVerification(signature, payload)
-
-	// Check for GitHub automated commits
-	if trustpolicies.IsGitHubAutomatedCommit(output, content, nil) {
-		return types.GitHubAutomatedSignature, output, verifyErr
-	}
-
-	// Additional checks for valid signatures
-	if status == types.ValidSignature {
-		// Check email matching
-		mismatch, signerEmail, authorEmail := utils.CheckEmailMismatch(raw, output)
-		if mismatch {
-			return types.EmailNotMatched, fmt.Sprintf("Signer <%s> does not match author <%s>", signerEmail, authorEmail), verifyErr
-		}
-
-		// Check GitHub authorization if configured
-		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
-			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
-			if authStatus != types.ValidSignature {
-				return authStatus, authMessage, authErr
-			}
-			if authMessage != "" {
-				fmt.Print(authMessage)
-			}
-		}
-	}
-
-	// Handle missing public key case with imported key
-	if status == types.MissingPublicKey && keyImported {
-		return types.MissingPublicKey, fmt.Sprintf("PGP signature found with key ID %s, but verification failed: %s", keyID, output), verifyErr
-	}
-
-	return status, output, verifyErr
-}
-
-// performGPGVerification runs `gpg --verify` on the extracted payload and signature.
-// It creates temporary files for compatibility with gpg CLI, then parses the result.
-func performGPGVerification(signature, payload string) (types.SignatureStatus, string, error) {
-	// Create temporary files for signature and payload
+	// Create temporary files for GPG verification
 	sigFile, err := os.CreateTemp("", "*.sig")
 	if err != nil {
 		return types.VerificationError, "", err
@@ -110,7 +177,37 @@ func performGPGVerification(signature, payload string) (types.SignatureStatus, s
 	// Execute GPG verification
 	cmd := exec.Command("gpg", "--verify", sigFile.Name(), payloadFile.Name())
 	output, err := cmd.CombinedOutput()
-
 	status := ClassifySignature(string(output))
+
+	// Check for GitHub automated commits
+	if trustpolicies.IsGitHubAutomatedCommit(string(output), content, nil) {
+		return types.GitHubAutomatedSignature, string(output), err
+	}
+
+	// Additional checks for valid signatures
+	if status == types.ValidSignature {
+		// Check email matching
+		mismatch, signerEmail, authorEmail := utils.CheckEmailMismatch(raw, string(output))
+		if mismatch {
+			return types.EmailNotMatched, fmt.Sprintf("Signer <%s> does not match author <%s>", signerEmail, authorEmail), err
+		}
+
+		// Check GitHub authorization if configured
+		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
+			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
+			if authStatus != types.ValidSignature {
+				return authStatus, authMessage, authErr
+			}
+			if authMessage != "" {
+				fmt.Print(authMessage)
+			}
+		}
+	}
+
+	// Handle missing public key case with imported key
+	if status == types.MissingPublicKey && keyImported {
+		return types.MissingPublicKey, fmt.Sprintf("PGP signature found with key ID %s, but verification failed: %s", keyID, string(output)), err
+	}
+
 	return status, string(output), err
 }
