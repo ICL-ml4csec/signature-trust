@@ -1,5 +1,8 @@
 name: "Commit Verification"
 description: "Verifies commit signatures for both repository commits and third-party dependencies"
+branding:
+  icon: "shield"
+  color: "blue"
 
 inputs:
   repository:
@@ -34,12 +37,12 @@ inputs:
     description: "Treat GitHub automated signatures as trusted"
     required: false
     default: "false"
-  lookback:
-    description: "Lookback duration for time-based checking (e.g. '4320h' for 180 days). Leave empty for commit-count based checking."
+  time-range:
+    description: "Time-range duration for time-based checking (e.g. '4320h' for 180 days). Leave empty for commit-count based checking."
     required: false
     default: ""
-  key-creation-cutoff:
-    description: "Check PGP key creation time."
+  key-age-period:
+    description: "Check PGP key age."
     required: false
     default: 730h
 
@@ -53,9 +56,9 @@ runs:
     - ${{ inputs.token }}
     - ${{ inputs.commits-to-check }}
     - ${{ inputs.accept-expired-keys }}
-    - ${{ inputs.accept-untrusted-signers }}
+    - ${{ inputs.accept-unauthorized }}
     - ${{ inputs.accept-uncertified-keys }}
-    - ${{ inputs.accept-missing-public-key }}
+    - ${{ inputs.accept-missing-key }}
     - ${{ inputs.accept-github-automated }}
-    - ${{ inputs.lookback }}
-    - ${{ inputs.key-creation-cutoff }}
+    - ${{ inputs.time-period }}
+    - ${{ inputs.key-age-period }}

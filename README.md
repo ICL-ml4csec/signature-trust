@@ -39,7 +39,44 @@ Keeping `.github/workflows/commitverification.yml` in the repository **doesn’t
 --- -->
 
 
+<!-- 
+* **`go.mod`** – For each Go module:
+  * Extracts the module path and version.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
 
+* **`requirements.txt`** - For each Python package:
+  * Parses the package name and version (or falls back to the latest).
+  * Retrieves metadata from the PyPI registry.
+  * Extracts and normalises the GitHub repository URL.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
+
+* **`package.json`** - For each npm package in dependencies and devDependencies:
+  * Handles all common formats: exact versions, semver ranges (`^`, `~`, `*`, `x`, `-`), GitHub shorthands, Git URLs, scoped aliases (`npm:@scope/pkg@version`), and tags like `latest`.
+  * Retrieves metadata from the npm registry.
+  * Extracts and normalises the GitHub repository URL.
+  * Resolves the tag to the corresponding Git commit SHA.
+  * Retrieves the n last commits (based on user input) on that commit’s branch.
+  * Calculates the percentage of commits signed with GPG or SSH.
+ -->
+
+ <!-- ### Running with Docker
+
+```bash
+# 1. Build the image
+docker build -t commit-verifier .
+
+# 2. Scan a repo (replace the placeholders)
+docker run --rm commit-verifier <owner/repo> <branch> <PAT>
+```
+All dependencies are already in the image; no Go installation required on the host. -->
+
+
+
+<!-- 
 # Commit Verification Tool
 
 Verify that **every commit on your branch and in your third‑party dependencies** has a valid cryptographic signature.
@@ -70,22 +107,11 @@ The program will
 
    * `CommitsToCheck`: number of commits to check (e.g. 30 or "all")
    * `AcceptExpiredKeys`: true/false
-   * `AcceptUntrustedSigners`: true/false
-   * `AcceptUncertifiedKeys`: true/false
+   * `AcceptEmailMismatches`: true/false
+   * `AcceptUncertifiedSigner`: true/false
    * `AcceptMissingPublicKey`: true/false
 
 2. Parse `go.mod`, `requirements.txt`, and `package.json` (if present), resolve each dependency’s tag → commit SHA, then print the percentage of signed commits for the most recent `n` commits on that SHA’s branch.
-
-<!-- ### Running with Docker
-
-```bash
-# 1. Build the image
-docker build -t commit-verifier .
-
-# 2. Scan a repo (replace the placeholders)
-docker run --rm commit-verifier <owner/repo> <branch> <PAT>
-```
-All dependencies are already in the image; no Go installation required on the host. -->
 
 ### Dry-run the workflow:
 ```bash
@@ -158,33 +184,243 @@ Verified commits: 40.00% (2 out of 5)
   * Outputs signed commit percentage and detailed status (valid, unsigned, expired, etc.).
     * If a commit does not meet user-defined criteria the full signature is printed
 
-<!-- 
-* **`go.mod`** – For each Go module:
-  * Extracts the module path and version.
-  * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the n last commits (based on user input) on that commit’s branch.
-  * Calculates the percentage of commits signed with GPG or SSH.
-
-* **`requirements.txt`** - For each Python package:
-  * Parses the package name and version (or falls back to the latest).
-  * Retrieves metadata from the PyPI registry.
-  * Extracts and normalises the GitHub repository URL.
-  * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the n last commits (based on user input) on that commit’s branch.
-  * Calculates the percentage of commits signed with GPG or SSH.
-
-* **`package.json`** - For each npm package in dependencies and devDependencies:
-  * Handles all common formats: exact versions, semver ranges (`^`, `~`, `*`, `x`, `-`), GitHub shorthands, Git URLs, scoped aliases (`npm:@scope/pkg@version`), and tags like `latest`.
-  * Retrieves metadata from the npm registry.
-  * Extracts and normalises the GitHub repository URL.
-  * Resolves the tag to the corresponding Git commit SHA.
-  * Retrieves the n last commits (based on user input) on that commit’s branch.
-  * Calculates the percentage of commits signed with GPG or SSH.
- -->
 
 ## Next Steps
-* Introduce more configurable trust policies (e.g. type of key).
-* Decide on final output
-* Refactor code for modularity and clarity
-* Write unit tests
 * Evaluate on a set of open-source repositories.
+
+ -->
+
+
+# Commit Verification Tool
+
+Verify that **every commit on your branch and in your third‑party dependencies** has a valid cryptographic signature with comprehensive policy enforcement and structured reporting.
+
+## Quick‑Start
+
+> **Personal Access Token (PAT)**: Generate one at **Settings → Developer settings → Personal access tokens → Tokens (classic)**. The token only needs `repo` → `public_repo` (public) or `repo` (private) scope so that the API can list commits and tags.
+
+### Using the CLI
+
+Requires Go ≥ 1.23 and a Personal Access Token (PAT).
+
+```bash 
+go run ./main.go <owner/repo> <branch> <PAT> <commits> <time-period> <key-age-period> <repo-policy> <deps-policy> [output-format] [output-file]
+```
+
+**Parameters:**
+- `<commits>`: Number of commits to check or "all"
+- `<time-period>`: Human-readable time range (e.g., "3 months", "1 year", "30 days", "" for no limit)
+- `<key-age-period>`: Minimum key age (e.g., "1 week", "30 days", "1 month")
+
+- `<repo-policy>`: Policy for repository commits (format below)  
+  _Note: `unsigned` is always treated as `false` — repository commits **must** be signed. `github-automated` is always treated as `true`. All commits are checked regardless of the time period; the time filter only applies to dependencies._
+
+- `<deps-policy>`: Policy for dependency commits (format below)
+- `[output-format]`: "console" (default) or "json"
+- `[output-file]`: Path for JSON report (when using json format)
+
+**Policy Format:** `expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized` (true/false for each)
+
+### Examples
+
+```bash
+export GITHUB_TOKEN="ghp_yourTokenHere"
+
+# Check last 6 months with strict dependency policy
+go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "6 months" "1 week" \
+  "false:false:false:false:true:false:false" \
+  "true:true:true:true:true:false:false"
+
+# Generate JSON report with 1 year time-range
+go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "1 year" "30 days" \
+  "false:false:false:false:true:false:false" \
+  "true:true:true:true:true:false:false" \
+  json security-report.json
+
+# Short format with relaxed policies
+go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "3m" "1w" \
+  "true:true:true:true:true:false:false" \
+  "true:true:true:true:true:true:false"
+```
+
+## Time Period Formats
+
+The tool supports intuitive time period specifications:
+
+- **Days:** `"1 day"`, `"7 days"`, `"30 days"`, `"1d"`
+- **Weeks:** `"1 week"`, `"2 weeks"`, `"1w"`
+- **Months:** `"1 month"`, `"3 months"`, `"6 months"`, `"1m"`
+- **Years:** `"1 year"`, `"2 years"`, `"5 years"`, `"1y"`
+- **Custom:** `"45 days"`, `"18 months"`, `"2 years"`
+- **No limit:** `""` (empty string)
+
+## What the Tool Checks
+
+### Repository Analysis
+- **Commit Signature Verification**: Validates cryptographic signatures on repository commits
+- **Unsigned commits always rejected**: Repository commits must be signed, regardless of policy flag
+- **Time-based Filtering**: Analyzes all commits in the repository (full history, no time cutoff).
+- **Policy Enforcement**: Configurable acceptance criteria for different signature types
+- **Key Age Validation**: Ensure signing keys meet minimum age requirements
+
+### Dependency Analysis
+The tool automatically detects and analyzes dependencies from:
+- **Go**: `go.mod` files
+- **JavaScript/Node.js**: `package.json` files  
+- **Python**: `requirements.txt` files
+
+For each dependency, it:
+1. Resolves package versions to specific Git commits
+2. Verifies signatures on recent commits in the dependency
+3. Applies the same policy framework as repository commits, can add time-based filtering
+4. Reports security scores and policy violations
+
+### Output Formats
+
+**Console Output:**
+- Summary statistics and security scores
+- Detailed policy violation breakdowns
+- Human-readable commit summaries with detailed rejection reasons
+
+**JSON Output:**
+- Structured data with complete commit analysis
+- Policy configuration and time range metadata
+- Suitable for integration with CI/CD systems and security dashboards
+
+## Sample Output
+
+```text
+=== REPOSITORY SIGNATURE CHECK ===
+Checking all commits for branch: main
+Commits newer than 6 months (26 Feb 2025)
+Key age policy: Signing keys must be older than 1 week
+
+== RESULTS ==
+Signature Check Summary (ICL-ml4csec/msc-hmj24):
+    Total commits: 37
+    Valid signatures: 30
+    Policy Result: PASSED
+       * Accepted: 37
+       * Rejected: 0
+    Security Score: 100%
+
+=== THIRD-PARTY DEPENDENCIES CHECK ===
+Checking all commits in third-party library:
+     Manifest: go.mod
+     Package: gorilla/mux Version: v1.8.0
+     Commits newer than 6 months (26 Feb 2025)
+     Key age policy: Signing keys must be older than 1 week
+
+== RESULTS ==
+Dependency gorilla/mux@v1.8.0: No relevant commits found that fit the criteria (skipped)
+
+=== THIRD-PARTY DEPENDENCIES CHECK ===
+Checking all commits in third-party library:
+     Manifest: go.mod
+     Package: stretchr/testify Version: v1.10.0
+     Commits newer than 6 months (26 Feb 2025)
+     Key age policy: Signing keys must be older than 1 week
+
+== RESULTS ==
+Signature Check Summary (stretchr/testify):
+    Total commits: 22
+    Valid signatures: 0
+    Policy Result: FAILED
+       * Accepted: 6
+       * Rejected: 16
+    Security Score: 27.3%
+
+Policy-dependent rejections:
+    - Unsigned commits: 16 commits
+      * a53be35c3b0cfcd5189cffcfd75df60ea581104c: Unsigned commit rejected by policy
+      * aafb604176db7e1f2c9810bc90d644291d057687: Unsigned commit rejected by policy
+      * ... and 13 more (see JSON report for full details)
+
+✅ Repository verification passed
+❌ Dependency verification failed: 1 of 2 dependencies rejected by policy
+```
+
+## GitHub Actions Integration
+
+Create `.github/workflows/signature-verification.yml`:
+
+```yaml
+name: Signature Verification
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main, develop]
+
+jobs:
+  verify-signatures:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Verify Signatures
+      run: |
+        go run ./main.go ${{ github.repository }} ${{ github.ref_name }} ${{ secrets.GITHUB_TOKEN }} \
+          all "6 months" "1 week" \
+          "false:false:false:false:true:false:false" \
+          "true:true:true:true:true:false:false" \
+          json signature-report.json
+          
+    - uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: signature-report
+        path: signature-report.json
+```
+
+## Policy Configuration
+
+Configure signature acceptance policies with seven boolean flags:
+
+1. **expired**: Accept signatures that are cryptographically valid but made with expired keys (valid-but-expired-key)
+
+2. **untrusted**: Accept signatures where the signer's email does not match the commit author (signed-but-untrusted-email)
+
+3. **uncertified**: Accept signatures made with uncertified keys — valid but not certified by a trusted authority (valid-but-not-certified)
+
+4. **missingkey**: Accept signatures when the commit is signed but the public key is not available for verification (signed-but-missing-key)
+
+5. **github-automated**: Accept GitHub's automated commit signatures, such as those from web UI merges (github-automated-signature)
+
+6. **unsigned**: Accept commits that are not signed at all (unsigned)
+
+7. **unauthorized**: Accept signatures that are valid but made with a key not linked to the author’s GitHub account (valid-but-key-not-on-github)
+
+**Example Policies:**
+
+```bash
+# Strict security (production)
+"false:false:false:false:true:false:false"
+
+# Balanced
+"true:true:true:true:true:false:false"
+
+# Permissive
+"true:true:true:true:true:true:false"
+```
+
+## Exit Codes
+
+- **0**: All signature checks passed
+- **1**: Signature verification failed (repository or dependencies)
+
+Perfect for CI/CD integration and merge protection rules.
+
+## Architecture
+
+- **Modular parsers**: Support for different package managers
+- **Policy enforcement**: Flexible, configurable security policies
+- **Time-aware analysis**: Focus on recent commits and key activity
+- **Structured output**: Human-readable output and machine-readable JSON for automation

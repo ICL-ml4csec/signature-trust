@@ -4,15 +4,18 @@ import (
 	"strings"
 )
 
+// IsTarballURL checks if the version string indicates a tarball URL
 func IsTarballURL(version string) bool {
-	return strings.HasSuffix(version, ".tgs") || strings.Contains(version, "/-/")
+	return strings.HasSuffix(version, ".tgs") || strings.HasSuffix(version, ".tar.gz") || strings.HasSuffix(version, ".tgz")
 }
 
+// IsLocalPath checks if the version string indicates a local file path
 func IsLocalPath(version string) bool {
 	return strings.HasPrefix(version, "file:") || strings.HasPrefix(version, "./") || strings.HasPrefix(version, "/") || strings.HasPrefix(version, "../")
 }
 
-func NormaliseDependencyName(name, version string) (string, string, string) {
+// NormalizeDependencyName normalises the dependency name and version
+func NormalizeDependencyName(name, version string) (string, string, string) {
 	switch {
 	case strings.HasPrefix(version, "git+"):
 		return name, "git", version

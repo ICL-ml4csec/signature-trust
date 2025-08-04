@@ -12,19 +12,23 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/client"
 )
 
+// IsValidSemver checks if a string is a valid semantic version
 func IsValidSemver(version string) bool {
-	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-sA-s\-\.]+)?(?:\+[\da-sA-s\-\.]+)?$`)
+	var semverRegex = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z\-\.]+)?(?:\+[\da-zA-Z\-\.]+)?$`)
 	return semverRegex.MatchString(version)
 }
 
+// IsPrerelease checks if a semantic version contains prerelease identifiers (has a hyphen)
 func IsPrerelease(version string) bool {
 	return strings.Contains(version, "-")
 }
 
+// isWildcard checks if the version string contains wildcard patterns like *.x, x, X, etc.
 func isWildcard(requested string) bool {
 	return strings.HasSuffix(requested, ".x") || strings.HasSuffix(requested, ".*") || requested == "x" || requested == "X" || strings.HasSuffix(requested, "x") || strings.HasSuffix(requested, "X")
 }
 
+// parseSemverParts extracts major, minor, and patch numbers from a semantic version string
 func parseSemverParts(version string) [3]int {
 	if idx := strings.Index(version, "-"); idx != -1 {
 		version = version[:idx]
@@ -44,6 +48,7 @@ func parseSemverParts(version string) [3]int {
 	return res
 }
 
+// semverLess compares two semantic versions numerically and returns true if version a is less than version b
 func semverLess(a, b string) bool {
 	as := parseSemverParts(a)
 	bs := parseSemverParts(b)
@@ -55,6 +60,7 @@ func semverLess(a, b string) bool {
 	return false
 }
 
+// toVersionSet converts a list of versions to a set for fast lookup
 func toVersionSet(list []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(list))
 	for _, v := range list {
@@ -63,6 +69,7 @@ func toVersionSet(list []string) map[string]struct{} {
 	return m
 }
 
+// intersect finds the common elements between two version sets (set intersection operation)
 func intersect(a, b map[string]struct{}) map[string]struct{} {
 	result := make(map[string]struct{})
 	for k := range a {
@@ -73,6 +80,7 @@ func intersect(a, b map[string]struct{}) map[string]struct{} {
 	return result
 }
 
+// applyComparator filters versions based on comparison operators (>=, >, <=, <, or exact match)
 func applyComparator(cmp string, versions []string) []string {
 	cmp = strings.TrimSpace(cmp)
 	var result []string
@@ -116,7 +124,8 @@ func applyComparator(cmp string, versions []string) []string {
 	return result
 }
 
-func normaliseUpperLimit(v string) string {
+// normalizeUpperLimit creates an exclusive upper bound version for range operations
+func normalizeUpperLimit(v string) string {
 	parts := strings.Split(v, ".")
 	switch len(parts) {
 	case 1:
@@ -137,6 +146,8 @@ func normaliseUpperLimit(v string) string {
 }
 
 // Version Resolver Functions
+
+// resolveLogicalOr handles "||" operator by trying each alternative and returning the highest version
 func resolveLogicalOr(requested string, versions map[string]interface{}) string {
 	parts := strings.Split(requested, "||")
 	var candidates []string
@@ -155,13 +166,14 @@ func resolveLogicalOr(requested string, versions map[string]interface{}) string 
 	return candidates[len(candidates)-1]
 }
 
+// resolveHyphenRange handles "X.Y.Z - A.B.C" range syntax by finding the highest version within bounds
 func resolveHyphenRange(requested string, versionList []string) string {
 	parts := strings.Split(requested, " - ")
 	if len(parts) != 2 {
 		return ""
 	}
 	lower := strings.TrimSpace(parts[0])
-	upper := normaliseUpperLimit(strings.TrimSpace(parts[1]))
+	upper := normalizeUpperLimit(strings.TrimSpace(parts[1]))
 	for i := len(versionList) - 1; i >= 0; i-- {
 		v := versionList[i]
 		if !semverLess(v, lower) && semverLess(v, upper) {
@@ -171,6 +183,7 @@ func resolveHyphenRange(requested string, versionList []string) string {
 	return ""
 }
 
+// resolveAndComparators handles multiple space-separated conditions (e.g., ">=1.0.0 <2.0.0")
 func resolveAndComparators(requested string, versionList []string) string {
 	parts := strings.Fields(requested)
 	if len(parts) <= 1 {
@@ -194,6 +207,7 @@ func resolveAndComparators(requested string, versionList []string) string {
 	return ""
 }
 
+// resolveCaret handles "^X.Y.Z" caret ranges (compatible releases)
 func resolveCaret(requested string, versionList []string) string {
 	baseParts := parseSemverParts(strings.TrimPrefix(requested, "^"))
 	lower := fmt.Sprintf("%d.%d.%d", baseParts[0], baseParts[1], baseParts[2])
@@ -214,6 +228,7 @@ func resolveCaret(requested string, versionList []string) string {
 	return ""
 }
 
+// resolveTilde handles "~X.Y.Z" tilde ranges (reasonably close versions)
 func resolveTilde(requested string, versionList []string) string {
 	clean := strings.TrimPrefix(requested, "~")
 	parts := strings.Split(clean, ".")
@@ -245,6 +260,7 @@ func resolveTilde(requested string, versionList []string) string {
 	return ""
 }
 
+// resolveWildcard handles wildcard patterns like "1.x", "1.2.*", "*", "x", etc.
 func resolveWildcard(requested string, versionList []string) string {
 	prefix := strings.TrimSuffix(strings.TrimSuffix(requested, ".x"), ".*")
 	prefix = strings.TrimSuffix(prefix, "x")
@@ -263,6 +279,7 @@ func resolveWildcard(requested string, versionList []string) string {
 	return ""
 }
 
+// resolveExactOrComparator handles exact version matches or single comparison operators
 func resolveExactOrComparator(requested string, versionList []string) string {
 	filtered := applyComparator(requested, versionList)
 	if len(filtered) > 0 {
@@ -279,9 +296,9 @@ func resolveExactOrComparator(requested string, versionList []string) string {
 	return ""
 }
 
-func FindLatestSemverTag(repo string, token string) (string, string, error) {
-
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", CleanGitHubURL(repo))
+// FindLatestSemverTag queries GitHub API to find the latest semantic version tag for a repository
+func FindLatestSemverTag(repoInfo *RepoInfo, token string) (string, string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoInfo.FullName)
 	resp, err := client.DoGet(url, token)
 	if err != nil {
 		return "", "", fmt.Errorf("error fetching tags: %v", err)
@@ -289,7 +306,7 @@ func FindLatestSemverTag(repo string, token string) (string, string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+		return "", "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repoInfo.FullName)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -315,7 +332,7 @@ func FindLatestSemverTag(repo string, token string) (string, string, error) {
 	}
 
 	if len(semverTags) == 0 {
-		return "", "", fmt.Errorf("no valid semver tags found for %s", repo)
+		return "", "", fmt.Errorf("no valid semver tags found for %s", repoInfo.FullName)
 	}
 
 	sort.Slice(semverTags, func(i, j int) bool {
@@ -326,6 +343,9 @@ func FindLatestSemverTag(repo string, token string) (string, string, error) {
 	return latestTag, tagToSHA[latestTag], nil
 }
 
+// ResolveVersion is the main entry point for semantic version resolution
+// Takes a version requirement string and available versions, returns the best matching version
+// Handles all semver patterns: exact, ranges, wildcards, operators, etc. Excludes prereleases
 func ResolveVersion(requested string, versions map[string]interface{}) string {
 	requested = strings.TrimSpace(requested)
 

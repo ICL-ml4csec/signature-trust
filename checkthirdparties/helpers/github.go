@@ -18,13 +18,20 @@ type GitHubTag struct {
 	} `json:"commit"`
 }
 
-func GetSHAFromTag(repoURL string, version string, token string) (string, error) {
-	repo := CleanGitHubURL(repoURL)
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repo)
+type RepoInfo struct {
+	Owner    string `json:"owner"`
+	Name     string `json:"name"`
+	FullName string `json:"full_name"` // e.g., "owner/repo"
+	URL      string `json:"url"`
+}
+
+// GetSHAFromTag retrieves the SHA of a specific tag from a GitHub repository
+func GetSHAFromTag(repoInfo *RepoInfo, version string, token string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags", repoInfo.FullName)
 	resp, err := client.DoGet(url, token)
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repo)
+		return "", fmt.Errorf("GitHub API returned HTTP %d for repo %s", resp.StatusCode, repoInfo.FullName)
 	}
 	if err != nil {
 		return "", fmt.Errorf("error fetching tags: %v", err)
@@ -56,6 +63,7 @@ func GetSHAFromTag(repoURL string, version string, token string) (string, error)
 	return "", fmt.Errorf("no matching tag found for version %s", version)
 }
 
+// GetSHAFromBranch retrieves the SHA of the latest commit on a specific branch
 func GetSHAFromBranch(repo string, branch string, token string) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, branch)
 	resp, err := client.DoGet(url, token)
@@ -84,7 +92,11 @@ func GetSHAFromBranch(repo string, branch string, token string) (string, error) 
 	return result.SHA, nil
 }
 
-func CleanGitHubURL(url string) string {
+// ExtractRepoInfo extracts repository information from various URL formats
+func ExtractRepoInfo(url string) (*RepoInfo, error) {
+	originalURL := url
+
+	// Normalize GitHub URL by removing prefixes, suffixes, and fragments
 	url = strings.TrimPrefix(url, "git+")
 	url = strings.TrimPrefix(url, "git://")
 	url = strings.Replace(url, "git@github.com:", "", 1)
@@ -94,6 +106,7 @@ func CleanGitHubURL(url string) string {
 	url = strings.Replace(url, "github.com/", "", 1)
 	url = strings.TrimSuffix(url, ".git")
 	url = strings.TrimSuffix(url, "/")
+
 	if idx := strings.Index(url, "#"); idx != -1 {
 		url = url[:idx]
 	}
@@ -101,14 +114,27 @@ func CleanGitHubURL(url string) string {
 	var majorVersionSuffix = regexp.MustCompile(`/v[0-9]+$`)
 	url = majorVersionSuffix.ReplaceAllString(url, "")
 
-	return url
+	// Validate and split into owner/repo
+	parts := strings.Split(url, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil, fmt.Errorf("invalid GitHub repository format: %s", originalURL)
+	}
+
+	return &RepoInfo{
+		Owner:    parts[0],
+		Name:     parts[1],
+		FullName: url,
+		URL:      originalURL,
+	}, nil
 }
 
+// ExpandGitHubShorthand expands shorthand GitHub URLs to full git+https format
 func ExpandGitHubShorthand(input string) string {
 	clean := strings.TrimPrefix(input, "github:")
 	return "git+https://github.com/" + clean + ".git"
 }
 
+// ExtractGitTag extracts the tag from a GitHub URL if present
 func ExtractGitTag(url string) string {
 	if idx := strings.Index(url, "#"); idx != -1 {
 		return url[idx+1:]
@@ -116,6 +142,7 @@ func ExtractGitTag(url string) string {
 	return ""
 }
 
+// GetDefaultBranch retrieves the default branch of a GitHub repository
 func GetDefaultBranch(repoDir string) string {
 	defaultBranchCmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
 	defaultBranchCmd.Dir = repoDir

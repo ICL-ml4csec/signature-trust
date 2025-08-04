@@ -7,14 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/analysing"
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
+	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
-	"github.com/ICL-ml4csec/msc-hmj24/outputs"
 )
 
 var excludeMap = make(map[string]string)
 
+// Replacement holds the GitHub repository and version used as a replacement
+// for a given module in go.mod.
 type Replacement struct {
 	Repo    string
 	Version string
@@ -22,105 +24,17 @@ type Replacement struct {
 
 var replaceMap = make(map[string]Replacement)
 
-func parseGoDependencyLine(line string, token string, config checksignature.LocalCheckConfig, timeCutoff *time.Time) {
-	line = strings.TrimSpace(line)
+// ParseGo parses go.mod and returns structured dependency results
+func ParseGo(modFile, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) ([]output.DependencyReport, error) {
+	var results []output.DependencyReport
 
-	if strings.HasPrefix(line, "//") || line == "" {
-		return
-	}
-
-	if idx := strings.Index(line, "//"); idx != -1 {
-		line = line[:idx]
-	}
-
-	if !strings.HasPrefix(line, "github.com/") {
-		fmt.Printf("Skipping non-github dependency (not implemented yet): %s\n\n", line)
-		return
-	}
-
-	parts := strings.Fields(line)
-	if len(parts) != 2 {
-		return
-	}
-
-	rawRepo := parts[0]
-	cleanedRepo := helpers.CleanGitHubURL(rawRepo)
-	version := parts[1]
-	version = strings.Split(version, "+")[0]
-
-	if replacement, ok := replaceMap[rawRepo]; ok {
-		fmt.Printf("[INFO] Replaced module: %s → %s@%s\n", rawRepo, replacement.Repo, replacement.Version)
-		cleanedRepo = helpers.CleanGitHubURL(replacement.Repo)
-		version = replacement.Version
-	}
-
-	if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(version, "v") {
-		fmt.Printf("Excluded: %s@%s (skipped)\n\n", cleanedRepo, version)
-		return
-	}
-
-	fmt.Printf("Manifest: go.mod\n")
-	fmt.Printf("Package: %s Version: %s\n", cleanedRepo, version)
-	fmt.Printf("Repository URL: %s\n", cleanedRepo)
-
-	if strings.Contains(version, "-") && strings.HasPrefix(version, "v0.0.0-") {
-		fmt.Printf("Pseudo-version detected, falling back to latest semver tag.\n")
-		tag, _, err := helpers.FindLatestSemverTag(cleanedRepo, token)
-		if err != nil {
-			fmt.Printf("Error finding latest tag for %s: %v\n\n", cleanedRepo, err)
-			return
-		}
-		fmt.Printf("Resolved to tag: %s\n", tag)
-
-		if excludedVersion, ok := excludeMap[cleanedRepo]; ok && excludedVersion == strings.TrimPrefix(tag, "v") {
-			fmt.Printf("Excluded after resolving: %s@%s (skipped)\n\n", cleanedRepo, tag)
-			return
-		}
-
-		// checksignature.CheckSignature(cleanedRepo, sha, token, config.CommitsToCheck)
-		return
-	}
-
-	sha, err := helpers.GetSHAFromTag(cleanedRepo, version, token)
+	data, err := os.Open(modFile)
 	if err != nil {
-		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", cleanedRepo, version, err)
-		return
-	}
-
-	fmt.Printf("Checking third-party library: %s@%s\n", cleanedRepo, version)
-	if config.KeyCreationCutoff != nil {
-		fmt.Printf("Key age policy: keys must be older than %s\n",
-			config.KeyCreationCutoff.Format(time.RFC3339))
-	}
-
-	fmt.Printf("Step 1: Checking commit signatures...\n")
-	results, err := checksignature.CheckSignatureLocal(cleanedRepo, sha, config)
-	if err != nil {
-		fmt.Printf("Error checking signatures for %s: %v\n\n", cleanedRepo, err)
-		return
-	}
-
-	fmt.Printf("Signature verification results:\n")
-	outputs.PrintSignatureResults(results, fmt.Sprintf("Third-party (%s@%s)", cleanedRepo, version), config)
-
-	signedCommits := analysing.GetSignedCommits(results)
-	if len(signedCommits) > 0 {
-		fmt.Printf("\nStep 2: Analysing contributors of %d signed commits...\n", len(signedCommits))
-		analysing.AnalyseSignedCommitContributors(cleanedRepo, signedCommits, token, config)
-	} else {
-		fmt.Printf("\nStep 2: No signed commits found - skipping contributor analysis\n")
-	}
-
-	fmt.Println()
-}
-
-func ParseGo(file string, token string, config checksignature.LocalCheckConfig, timeCutoff *time.Time) error {
-	data, err := os.Open(file)
-	if err != nil {
-		return fmt.Errorf("error opening go.mod: %v", err)
+		return nil, fmt.Errorf("error opening go.mod: %v", err)
 	}
 	defer data.Close()
 
+	// First pass: handle exclude and replace directives
 	scanner := bufio.NewScanner(data)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -129,11 +43,17 @@ func ParseGo(file string, token string, config checksignature.LocalCheckConfig, 
 			line = strings.Split(line, "//")[0]
 			parts := strings.Fields(line)
 			if len(parts) == 2 {
-				cleanedRepoPath := helpers.CleanGitHubURL(parts[0])
-				version := strings.Split(parts[1], "+")[0]
+				// Extract repo info for exclude
+				repoInfo, err := helpers.ExtractRepoInfo(parts[0])
+				if err != nil {
+					fmt.Printf("Error extracting exclude repo info for %s: %v\n", parts[0], err)
+					continue
+				}
+
+				version := strings.Split(parts[1], "+")[0] // Strip build metadata from version
 				version = strings.TrimPrefix(version, "v")
-				excludeMap[cleanedRepoPath] = version
-				fmt.Printf("Added to excludeMap: %s -> %s\n\n", cleanedRepoPath, version)
+				excludeMap[repoInfo.FullName] = version
+				fmt.Printf("Added to excludeMap: %s -> %s\n\n", repoInfo.FullName, version)
 			}
 		} else if strings.HasPrefix(line, "replace ") {
 			line = strings.TrimPrefix(line, "replace ")
@@ -149,17 +69,23 @@ func ParseGo(file string, token string, config checksignature.LocalCheckConfig, 
 					continue
 				}
 
-				repo := helpers.CleanGitHubURL(replacement)
-				version = strings.Split(version, "+")[0]
+				// Extract repo info for replacement
+				repoInfo, err := helpers.ExtractRepoInfo(replacement)
+				if err != nil {
+					fmt.Printf("Error extracting replacement repo info for %s: %v\n", replacement, err)
+					continue
+				}
 
-				replaceMap[original] = Replacement{Repo: repo, Version: version}
+				version = strings.Split(version, "+")[0]
+				replaceMap[original] = Replacement{Repo: repoInfo.FullName, Version: version}
 			}
 		}
 	}
 
-	_, err = data.Seek(0, 0)
+	// Second pass: process dependencies and collect results
+	_, err = data.Seek(0, 0) // Rewind file for second pass
 	if err != nil {
-		return fmt.Errorf("error rewinding go.mod: %v", err)
+		return nil, fmt.Errorf("error rewinding go.mod: %v", err)
 	}
 	scanner = bufio.NewScanner(data)
 	inRequireBlock := false
@@ -185,9 +111,180 @@ func ParseGo(file string, token string, config checksignature.LocalCheckConfig, 
 		}
 		if inRequireBlock || strings.HasPrefix(line, "require ") {
 			line = strings.TrimPrefix(line, "require ")
-			parseGoDependencyLine(line, token, config, timeCutoff)
+
+			// Process dependency and collect result
+			depResult := parseGoDependencyLineWithResult(line, token, config, timeCutoff, outputFormat)
+			if depResult != nil {
+				results = append(results, *depResult)
+			}
 		}
 	}
 
-	return scanner.Err()
+	return results, scanner.Err()
+}
+
+// parseGoDependencyLineWithResult processes a dependency line and returns a DependencyReport
+func parseGoDependencyLineWithResult(line string, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	line = strings.TrimSpace(line)
+
+	if strings.HasPrefix(line, "//") || line == "" {
+		return nil
+	}
+
+	if idx := strings.Index(line, "//"); idx != -1 {
+		line = line[:idx]
+	}
+
+	if !strings.HasPrefix(line, "github.com/") {
+		fmt.Printf("Skipping non-github dependency (not implemented yet): %s\n\n", line)
+		return &output.DependencyReport{
+			Package: line,
+			Version: "unknown",
+			Status:  "SKIPPED",
+			Issues:  []string{"Non-GitHub dependency not supported"},
+		}
+	}
+
+	parts := strings.Fields(line)
+	if len(parts) != 2 {
+		return nil
+	}
+
+	rawRepo := parts[0]
+	version := parts[1]
+	version = strings.Split(version, "+")[0]
+
+	// Extract repository info once
+	repoInfo, err := helpers.ExtractRepoInfo(rawRepo)
+	if err != nil {
+		fmt.Printf("Error extracting repo info for %s: %v\n\n", rawRepo, err)
+		return &output.DependencyReport{
+			Package: rawRepo,
+			Version: version,
+			Status:  "ERROR",
+			Issues:  []string{fmt.Sprintf("Invalid repository format: %v", err)},
+		}
+	}
+
+	// Handle replacements
+	if replacement, ok := replaceMap[rawRepo]; ok {
+		fmt.Printf("[INFO] Replaced module: %s → %s@%s\n", rawRepo, replacement.Repo, replacement.Version)
+
+		// Extract replacement repo info
+		replacementRepoInfo, err := helpers.ExtractRepoInfo(replacement.Repo)
+		if err != nil {
+			fmt.Printf("Error extracting replacement repo info: %v\n\n", err)
+			return &output.DependencyReport{
+				Package: rawRepo,
+				Version: version,
+				Status:  "ERROR",
+				Issues:  []string{fmt.Sprintf("Invalid replacement repository format: %v", err)},
+			}
+		}
+		repoInfo = replacementRepoInfo
+		version = replacement.Version
+	}
+
+	// Handle exclusions using extracted repo info
+	if excludedVersion, ok := excludeMap[repoInfo.FullName]; ok && excludedVersion == strings.TrimPrefix(version, "v") {
+		fmt.Printf("Excluded: %s@%s (skipped)\n\n", repoInfo.FullName, version)
+		return &output.DependencyReport{
+			Package: repoInfo.FullName,
+			Version: version,
+			Status:  "EXCLUDED",
+			Issues:  []string{"Excluded by go.mod"},
+		}
+	}
+
+	// Handle pseudo-versions
+	if strings.Contains(version, "-") && strings.HasPrefix(version, "v0.0.0-") {
+		fmt.Printf("Pseudo-version detected, falling back to latest semver tag.\n")
+		tag, _, err := helpers.FindLatestSemverTag(repoInfo, token)
+		if err != nil {
+			fmt.Printf("Error finding latest tag for %s: %v\n\n", repoInfo.FullName, err)
+			return &output.DependencyReport{
+				Package: repoInfo.FullName,
+				Version: version,
+				Status:  "ERROR",
+				Issues:  []string{fmt.Sprintf("Failed to resolve pseudo-version: %v", err)},
+			}
+		}
+		fmt.Printf("Resolved to tag: %s\n", tag)
+
+		if excludedVersion, ok := excludeMap[repoInfo.FullName]; ok && excludedVersion == strings.TrimPrefix(tag, "v") {
+			fmt.Printf("Excluded after resolving: %s@%s (skipped)\n\n", repoInfo.FullName, tag)
+			return &output.DependencyReport{
+				Package: repoInfo.FullName,
+				Version: version,
+				Status:  "EXCLUDED",
+				Issues:  []string{"Excluded after pseudo-version resolution"},
+			}
+		}
+
+		return &output.DependencyReport{
+			Package: repoInfo.FullName,
+			Version: version,
+			Status:  "PSEUDO_VERSION",
+			Issues:  []string{fmt.Sprintf("Resolved to tag: %s", tag)},
+		}
+	}
+
+	// Get SHA from tag using extracted repo info
+	sha, err := helpers.GetSHAFromTag(repoInfo, version, token)
+	if err != nil {
+		fmt.Printf("Error getting SHA for %s@%s: %v\n\n", repoInfo.FullName, version, err)
+		return &output.DependencyReport{
+			Package: repoInfo.FullName,
+			Version: version,
+			Status:  "ERROR",
+			Issues:  []string{fmt.Sprintf("Failed to get SHA: %v", err)},
+		}
+	}
+
+	// Check signatures using repo's full name
+	signatureResults, err := checksignature.CheckSignatureLocal(repoInfo.FullName, sha, config)
+	if err != nil {
+		fmt.Printf("Error checking signatures for %s: %v\n\n", repoInfo.FullName, err)
+		return &output.DependencyReport{
+			Package: repoInfo.FullName,
+			Version: version,
+			Status:  "ERROR",
+			Issues:  []string{fmt.Sprintf("Signature check failed: %v", err)},
+		}
+	}
+
+	// Process results
+	summary := checksignature.ProcessSignatureResults(signatureResults, config)
+	output.PrintDependencyConsoleOutput(summary, config, "go.mod", repoInfo.FullName, version, len(signatureResults), outputFormat)
+
+	var status string
+	var issues []string
+
+	if len(signatureResults) == 0 {
+		status = "SKIPPED"
+		fmt.Printf("Dependency %s@%s: No relevant commits found that fit the criteria (skipped)\n", repoInfo.FullName, version)
+	} else if summary.RejectedByPolicy > 0 {
+		status = "FAILED"
+		fmt.Printf("Dependency %s@%s rejected by policy\n", repoInfo.FullName, version)
+	} else {
+		status = "PASSED"
+		fmt.Printf("Dependency %s@%s passed policy check\n", repoInfo.FullName, version)
+	}
+
+	fmt.Println()
+
+	return &output.DependencyReport{
+		Package:         repoInfo.FullName,
+		Version:         version,
+		Manifest:        "go.mod",
+		Status:          status,
+		Issues:          issues,
+		CommitsChecked:  len(signatureResults),
+		ValidSignatures: summary.ValidSignatures,
+		Summary:         output.BuildSignatureAnalysis(summary, signatureResults),
+		Commits:         output.BuildCommitAnalysis(signatureResults),
+		Policy:          output.BuildPolicyConfiguration(config),
+		KeyAgePolicy:    helpers.CreateKeyAgeRange(config),
+		TimeRangePolicy: helpers.CreateTimeRange(timeCutoff),
+	}
 }
