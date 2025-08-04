@@ -1,37 +1,33 @@
-name: Commit Verification
+name: Signature Verification
 
-on: [push, pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main, development]
 
 jobs:
-  build-and-test:
+  verify-signatures:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v4
         with:
           go-version: "1.23"
 
-      - name: Build Thirdparties Package
+      - name: Verify Signatures
+        run: |
+          go run ./main.go ${{ github.repository }} ${{ github.ref_name }} ${{ secrets.GITHUB_TOKEN }} \
+            all "6 months" "1 week" \
+            "false:false:false:false:true:false:false" \
+            "true:true:true:true:true:false:false" \
+            json signature-report.json
 
-        run: go build ./checkthirdparties
-
-      - name: Run Go Vet
-        run: go vet ./checkthirdparties
-
-      - name: Run Go Action
-        uses: ./
+      - uses: actions/upload-artifact@v3
+        if: always()
         with:
-          repository: ${{ github.repository }}
-          branch: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commits-to-check: 10
-          accept-expired-keys: true
-          accept-untrusted-signers: false
-          accept-uncertified-keys: true
-          accept-missing-key: false
-          accept-github-automated: true
-          time-range: 4320h
-          key-age-period: 4320h
+          name: signature-report
+          path: signature-report.json

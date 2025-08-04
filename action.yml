@@ -29,7 +29,7 @@ inputs:
     description: "Treat valid signatures without certification as trusted"
     required: false
     default: "false"
-  accept-missing-public-key:
+  accept-missing-key:
     description: "Treat signatures with missing public keys as trusted"
     required: false
     default: "false"
