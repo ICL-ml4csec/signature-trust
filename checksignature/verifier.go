@@ -19,7 +19,6 @@ import (
 
 // CheckSignatureLocal performs signature verification on a Git repository
 func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([]output.SignatureCheckResult, error) {
-	repoURL := fmt.Sprintf("https://github.com/%s.git", repoPath)
 	tmpDir, err := os.MkdirTemp("", "repo-")
 	if err != nil {
 		return nil, err
@@ -27,7 +26,16 @@ func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([
 	defer os.RemoveAll(tmpDir)
 
 	// Clone repository
-	if out, err := exec.Command("git", "clone", repoURL, tmpDir).CombinedOutput(); err != nil {
+	var cloneURL string
+	if config.Token != "" {
+		// Use authenticated URL for private repos
+		cloneURL = fmt.Sprintf("https://%s@github.com/%s.git", config.Token, config.Repo)
+	} else {
+		// Use public URL
+		cloneURL = fmt.Sprintf("https://github.com/%s.git", config.Repo)
+	}
+
+	if out, err := exec.Command("git", "clone", cloneURL, tmpDir).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, out)
 	}
 
