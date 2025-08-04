@@ -15,37 +15,33 @@ inputs:
     description: "GitHub token"
     required: true
   commits-to-check:
-    description: "Number of commits to check"
-    required: true
-  accept-expired-keys:
-    description: "Treat expired but valid signatures as trusted"
+    description: "Number of commits to check (or 'all')"
     required: false
-    default: "false"
-  accept-untrusted-signers:
-    description: "Treat signatures where email does not match as trusted"
-    required: false
-    default: "false"
-  accept-uncertified-keys:
-    description: "Treat valid signatures without certification as trusted"
-    required: false
-    default: "false"
-  accept-missing-key:
-    description: "Treat signatures with missing public keys as trusted"
-    required: false
-    default: "false"
-  accept-github-automated:
-    description: "Treat GitHub automated signatures as trusted"
-    required: false
-    default: "false"
+    default: "all"
   time-range:
-    description: "Time-range duration for time-based checking (e.g. '4320h' for 180 days). Leave empty for commit-count based checking."
+    description: "Time-range duration for time-based checking (e.g. '6 months', '4320h'). Leave empty for no limit"
+    required: false
+    default: "6 months"
+  key-age-period:
+    description: "Check PGP key age (e.g. '730h', '1 week'). Leave empty for no requirement"
     required: false
     default: ""
-  key-age-period:
-    description: "Check PGP key age."
+  repo-policy:
+    description: "Repository policy (colon-separated: expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized)"
     required: false
-    default: 730h
-
+    default: "false:false:false:false:true:false:false"
+  deps-policy:
+    description: "Dependencies policy (colon-separated: expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized)"
+    required: false
+    default: "true:true:true:true:true:true:true"
+  output-format:
+    description: "Output format ('json' or 'console')"
+    required: false
+    default: "json"
+  output-file:
+    description: "Output file name for JSON reports"
+    required: false
+    default: "signature-report.json"
 
 runs:
   using: "docker"
@@ -55,10 +51,9 @@ runs:
     - ${{ inputs.branch }}
     - ${{ inputs.token }}
     - ${{ inputs.commits-to-check }}
-    - ${{ inputs.accept-expired-keys }}
-    - ${{ inputs.accept-unauthorized }}
-    - ${{ inputs.accept-uncertified-keys }}
-    - ${{ inputs.accept-missing-key }}
-    - ${{ inputs.accept-github-automated }}
-    - ${{ inputs.time-period }}
+    - ${{ inputs.time-range }}
     - ${{ inputs.key-age-period }}
+    - ${{ inputs.repo-policy }}
+    - ${{ inputs.deps-policy }}
+    - ${{ inputs.output-format }}
+    - ${{ inputs.output-file }}
