@@ -18,6 +18,14 @@ jobs:
         with:
           go-version: "1.23"
 
+      - name: Import GPG keys from GitHub
+        run: |
+          # Get GPG keys for contributors from GitHub
+          curl -s "https://api.github.com/users/hannajonsdottir/gpg_keys" | jq -r '.[].raw_key' | gpg --import
+          # Add other contributors as needed
+
+          gpg --list-keys
+
       - name: Set branch name
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
