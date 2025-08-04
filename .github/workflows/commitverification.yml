@@ -26,6 +26,17 @@ jobs:
             "true:true:true:true:true:false:false" \
             json signature-report.json
 
+      - name: Display signature report
+        if: always()
+        run: |
+          if [ -f signature-report.json ]; then
+            echo "=== SIGNATURE REPORT DETAILS ==="
+            cat signature-report.json | jq '.' || cat signature-report.json
+          else
+            echo "signature-report.json not found"
+            ls -la
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
