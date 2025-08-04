@@ -183,7 +183,7 @@ func determineSignatureStatus(
 
 	// Verify PGP signature if present
 	if hasPGP {
-		status, rawOutput, err = gpg.HybridVerify(catOut, commitSHA, config)
+		status, rawOutput, err = gpg.Verify(catOut, commitSHA, config)
 	}
 
 	// Verify SSH signature if present
