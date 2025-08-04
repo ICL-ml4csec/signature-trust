@@ -8,10 +8,13 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 )
 
-// ExtractPublicKeyFromSignature extracts GPG public key and key ID from signature
+// ExtractPublicKeyFromSignature extracts a GPG public key and its key ID from a given ASCII-armored signature.
+// It uses `gpg --list-packets` to parse the signature, then attempts to fetch the key from known keyservers.
 func ExtractPublicKeyFromSignature(signature string) (publicKey string, keyID string, err error) {
 	cmd := exec.Command("gpg", "--list-packets")
 	cmd.Stdin = strings.NewReader(signature)
+
+	// Parse the signature to extract key ID
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to parse PGP signature: %v", err)
@@ -31,6 +34,7 @@ func ExtractPublicKeyFromSignature(signature string) (publicKey string, keyID st
 	}
 
 	if keyID == "" {
+		// Parsing failed or key ID not found in expected format
 		return "", "", fmt.Errorf("could not extract key ID from signature")
 	}
 
@@ -42,7 +46,7 @@ func ExtractPublicKeyFromSignature(signature string) (publicKey string, keyID st
 	return publicKey, keyID, nil
 }
 
-// ExtractSignatureFromCommit extracts PGP signature from commit content
+// ExtractSignatureFromCommit extracts the GPG signature and signed payload from the raw commit content.
 func ExtractSignatureFromCommit(content string) (signature string, payload string, found bool) {
 	if !strings.Contains(content, "gpgsig -----BEGIN PGP SIGNATURE-----") {
 		return "", "", false
@@ -52,7 +56,7 @@ func ExtractSignatureFromCommit(content string) (signature string, payload strin
 	sigStart := -1
 	sigEnd := -1
 
-	// Find signature boundaries
+	// Find signature boundaries in commit content
 	for i, line := range lines {
 		if strings.HasPrefix(line, "gpgsig -----BEGIN PGP SIGNATURE-----") {
 			sigStart = i
@@ -67,7 +71,7 @@ func ExtractSignatureFromCommit(content string) (signature string, payload strin
 		return "", "", false
 	}
 
-	// Extract signature lines
+	// Extract signature lines, handling multiline format with "gpgsig " and continuation lines
 	var sigLines []string
 	for i := sigStart; i <= sigEnd; i++ {
 		line := lines[i]
@@ -79,10 +83,9 @@ func ExtractSignatureFromCommit(content string) (signature string, payload strin
 			sigLines = append(sigLines, sigContent)
 		}
 	}
-
 	signature = strings.Join(sigLines, "\n")
 
-	// Extract payload (everything except signature)
+	// Extract payload: all content outside the signature block
 	var payloadLines []string
 	for i, line := range lines {
 		if i < sigStart || i > sigEnd {
@@ -90,57 +93,63 @@ func ExtractSignatureFromCommit(content string) (signature string, payload strin
 		}
 	}
 
-	// Remove trailing empty lines from payload
+	// Ensure payload ends with newline
 	for len(payloadLines) > 0 && payloadLines[len(payloadLines)-1] == "" {
 		payloadLines = payloadLines[:len(payloadLines)-1]
 	}
-
 	payload = strings.Join(payloadLines, "\n") + "\n"
 
 	return signature, payload, true
 }
 
-// ClassifySignature determines the status of a GPG signature from verification output
+// ClassifySignature determines the signature status based on GPG output.
+// It returns enums for valid, expired, untrusted, missing, or invalid signatures,
+// and treats revoked keys as a type of expired key.
 func ClassifySignature(output string) types.SignatureStatus {
 	lowerOutput := strings.ToLower(output)
 
-	switch {
-	// Expired but valid
-	case strings.Contains(lowerOutput, "good") &&
-		(strings.Contains(lowerOutput, "expired") || strings.Contains(lowerOutput, "key expired")):
+	// Handle valid signatures with expired keys
+	if strings.Contains(lowerOutput, "good") &&
+		(strings.Contains(lowerOutput, "expired") ||
+			strings.Contains(lowerOutput, "key expired") ||
+			strings.Contains(lowerOutput, "revoked")) {
 		return types.ValidSignatureButExpiredKey
+	}
 
-	// Valid but not certified/trusted
-	case strings.Contains(lowerOutput, "good") &&
+	// Handle valid signatures with untrusted or uncertified keys
+	if strings.Contains(lowerOutput, "good") &&
 		(strings.Contains(lowerOutput, "no indication") ||
-			strings.Contains(lowerOutput, "not certified")):
+			strings.Contains(lowerOutput, "not certified")) {
 		return types.ValidSignatureButSignerNotCertified
+	}
 
-	// Good signatures (any type)
-	case strings.Contains(lowerOutput, "good signature"):
+	// Handle valid signatures
+	if strings.Contains(lowerOutput, "good signature") {
 		return types.ValidSignature
+	}
 
-	// Missing keys (various formats)
-	case strings.Contains(lowerOutput, "no public key") ||
+	// Handle missing keys
+	if strings.Contains(lowerOutput, "no public key") ||
 		strings.Contains(lowerOutput, "public key not found") ||
-		strings.Contains(lowerOutput, "can't check signature: no public key"):
+		strings.Contains(lowerOutput, "can't check signature: no public key") {
 		return types.MissingPublicKey
+	}
 
-	// Bad/invalid signatures
-	case strings.Contains(lowerOutput, "bad signature") ||
+	// Handle invalid or corrupted signatures
+	if strings.Contains(lowerOutput, "bad signature") ||
 		strings.Contains(lowerOutput, "signature verification failed") ||
-		strings.Contains(lowerOutput, "invalid signature"):
+		strings.Contains(lowerOutput, "invalid signature") {
 		return types.InvalidSignature
+	}
 
-	// GPG errors and failures
-	case strings.Contains(lowerOutput, "gpg: fatal") ||
+	// Handle GPG internal errors
+	if strings.Contains(lowerOutput, "gpg: fatal") ||
 		strings.Contains(lowerOutput, "gpg: error") ||
 		strings.Contains(lowerOutput, "verification failed") ||
-		strings.Contains(lowerOutput, "exit status"):
+		strings.Contains(lowerOutput, "exit status") {
 		return types.VerificationError
-
-	// No signature
-	default:
-		return types.UnsignedCommit
 	}
+
+	// No signature found
+	return types.UnsignedCommit
 }

@@ -21,6 +21,7 @@ func GetCommitContributor(repo, commitSHA, token string) (string, error) {
 		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
+	// Minimal struct to extract the GitHub username of the commit author
 	var commit struct {
 		Author struct {
 			Login string `json:"login"`
@@ -32,6 +33,7 @@ func GetCommitContributor(repo, commitSHA, token string) (string, error) {
 	}
 
 	if commit.Author.Login == "" {
+		// The commit has no associated GitHub user
 		return "", fmt.Errorf("no GitHub user associated with commit")
 	}
 

@@ -4,7 +4,8 @@ import (
 	"strings"
 )
 
-// RemoveSignatureFromCommit removes the signature block from commit content
+// RemoveSignatureFromCommit removes the SSH/GPG signature block from a commit object string.
+// This is necessary before hashing the commit contents for signature verification.
 func RemoveSignatureFromCommit(raw string) string {
 	lines := strings.Split(raw, "\n")
 	sigStart := -1
@@ -30,7 +31,6 @@ func RemoveSignatureFromCommit(raw string) string {
 	for i, line := range lines {
 		if i < sigStart || i > sigEnd {
 			result = append(result, line)
-		} else {
 		}
 	}
 

@@ -7,7 +7,8 @@ import (
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
 )
 
-// ValidateAuthorization checks if SSH key belongs to the commit author on GitHub
+// ValidateAuthorization verifies whether the given SSH public key was registered as a signing key
+// for the GitHub user who authored the specified commit.
 func ValidateAuthorization(pubKeyBlob []byte, repo, commitSHA, token string) (bool, error) {
 	if token == "" {
 		return true, fmt.Errorf("no GitHub token provided")

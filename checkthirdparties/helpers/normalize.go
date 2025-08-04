@@ -14,8 +14,8 @@ func IsLocalPath(version string) bool {
 	return strings.HasPrefix(version, "file:") || strings.HasPrefix(version, "./") || strings.HasPrefix(version, "/") || strings.HasPrefix(version, "../")
 }
 
-// NormaliseDependencyName normalises the dependency name and version
-func NormaliseDependencyName(name, version string) (string, string, string) {
+// NormalizeDependencyName normalises the dependency name and version
+func NormalizeDependencyName(name, version string) (string, string, string) {
 	switch {
 	case strings.HasPrefix(version, "git+"):
 		return name, "git", version

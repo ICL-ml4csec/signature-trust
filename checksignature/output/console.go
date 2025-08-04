@@ -3,20 +3,21 @@ package output
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
 )
 
-// PrintRepositoryConsoleOutput prints the new formatted repository output
+// PrintRepositoryConsoleOutput displays a detailed report of signature verification results
+// for all commits in a repository.
 func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, outputFormat string) {
 	fmt.Printf("\n=== REPOSITORY SIGNATURE CHECK ===\n")
 	fmt.Printf("Checking all commits for branch: %s\n", config.Branch)
 
 	// Show key age policy if configured
 	if config.KeyCreationCutoff != nil {
-		cutoffDuration := time.Since(*config.KeyCreationCutoff)
-		fmt.Printf("Key age policy: Signing keys must be older than %s\n", formatDuration(cutoffDuration))
+		fmt.Printf("Key age policy: Signing keys must be older than %s (%s)\n",
+			config.OriginalKeyPeriod,
+			config.KeyCreationCutoff.Format("2 Jan 2006"))
 	}
 
 	fmt.Printf("\n== RESULTS ==\n")
@@ -87,7 +88,7 @@ func PrintRepositoryConsoleOutput(summary SignatureSummary, config types.LocalCh
 
 }
 
-// PrintDependencyConsoleOutput prints the formatted dependency output
+// PrintDependencyConsoleOutput displays signature check results for a third-party dependency.
 func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCheckConfig, manifest, packageName, version string, commitsChecked int, outputFormat string) {
 	fmt.Printf("=== THIRD-PARTY DEPENDENCIES CHECK ===\n")
 
@@ -182,55 +183,8 @@ func PrintDependencyConsoleOutput(summary SignatureSummary, config types.LocalCh
 	}
 }
 
-// PrintSecurityAnomalyDetection prints the contributor analysis section
-// WIP
-func PrintSecurityAnomalyDetection(contributors map[string]ContributorAnalysis) {
-	if len(contributors) == 0 {
-		return
-	}
-
-	fmt.Printf("\n=== SECURITY ANOMALY DETECTION ===\n")
-	fmt.Printf("Contributors with potential security concerns:\n\n")
-
-	normalContributors := 0
-
-	for username, analysis := range contributors {
-		risk := assessRiskLevel(analysis)
-
-		switch risk {
-		case "HIGH":
-			fmt.Printf("Username: %s\n", username)
-			fmt.Printf("  HIGH RISK: %d keys added in last %d days (total: %d keys)\n",
-				analysis.RecentKeysCount, analysis.RecentKeysDays, analysis.TotalKeys)
-			if analysis.CommitsWithNewKeys > 0 {
-				fmt.Printf("    * Recent commits signed with new keys: %d\n", analysis.CommitsWithNewKeys)
-			}
-			fmt.Printf("\n")
-
-		case "MEDIUM":
-			fmt.Printf("Username: %s\n", username)
-			if analysis.RecentKeysCount > 0 {
-				fmt.Printf("  MEDIUM RISK: %d keys added in last %d days (total: %d keys)\n",
-					analysis.RecentKeysCount, analysis.RecentKeysDays, analysis.TotalKeys)
-			} else {
-				fmt.Printf("  MEDIUM RISK: %d total keys (%d recent)\n",
-					analysis.TotalKeys, analysis.RecentKeysCount)
-			}
-			if analysis.CommitsWithNewKeys > 0 {
-				fmt.Printf("    * Recent commits signed with new keys: %d\n", analysis.CommitsWithNewKeys)
-			}
-			fmt.Printf("\n")
-
-		default:
-			normalContributors++
-		}
-	}
-
-	if normalContributors > 0 {
-		fmt.Printf(" %d other contributors with normal key patterns\n", normalContributors)
-	}
-}
-
+// getPolicyDependentRejections returns commits rejected due to configurable trust policies.
+// These rejections depend on user-defined settings in the verification config.
 func getPolicyDependentRejections(summary SignatureSummary, config types.LocalCheckConfig) map[string][]CommitFailure {
 	rejections := make(map[string][]CommitFailure)
 
@@ -259,7 +213,7 @@ func getPolicyDependentRejections(summary SignatureSummary, config types.LocalCh
 		case strings.Contains(description, "not certified") && !config.AcceptUncertifiedSigner:
 			rejections["Uncertified signers"] = append(rejections["Uncertified signers"], commit)
 		case strings.Contains(description, "unauthorized") && !config.AcceptUnregisteredKeys:
-			rejections["Unauthorized signers"] = append(rejections["Unauthorized signers"], commit)
+			rejections["Unregistered signers"] = append(rejections["Unregistered signers"], commit)
 		case strings.Contains(description, "Unsigned commit") && !config.AcceptUnsignedCommits:
 			rejections["Unsigned commits"] = append(rejections["Unsigned commits"], commit)
 		case strings.Contains(description, "No signature") && !config.AcceptUnsignedCommits:
@@ -270,6 +224,8 @@ func getPolicyDependentRejections(summary SignatureSummary, config types.LocalCh
 	return rejections
 }
 
+// getHardRejections returns commits that failed verification due to invalid, corrupted,
+// or cryptographically broken signatures — these are always rejected regardless of policy.
 func getHardRejections(summary SignatureSummary) map[string][]CommitFailure {
 	rejections := make(map[string][]CommitFailure)
 
@@ -295,39 +251,6 @@ func getHardRejections(summary SignatureSummary) map[string][]CommitFailure {
 	}
 
 	return rejections
-}
-
-func assessRiskLevel(analysis ContributorAnalysis) string {
-	// High risk: Many keys added recently
-	if analysis.RecentKeysCount >= 5 && analysis.RecentKeysDays <= 7 {
-		return "HIGH"
-	}
-	if analysis.RecentKeysCount >= 8 && analysis.RecentKeysDays <= 14 {
-		return "HIGH"
-	}
-
-	// Medium risk: Some recent activity or many total keys
-	if analysis.RecentKeysCount >= 3 && analysis.RecentKeysDays <= 14 {
-		return "MEDIUM"
-	}
-	if analysis.TotalKeys >= 15 {
-		return "MEDIUM"
-	}
-
-	return "LOW"
-}
-
-// formatDuration formats a time.Duration into a human-readable string
-func formatDuration(d time.Duration) string {
-	hours := int(d.Hours())
-	if hours < 24 {
-		return fmt.Sprintf("%dh", hours)
-	}
-	days := hours / 24
-	if days < 30 {
-		return fmt.Sprintf("%dd", days)
-	}
-	return fmt.Sprintf("%.1fmo", float64(days)/30.0)
 }
 
 // CalculateSecurityScore computes the security score based on accepted commits

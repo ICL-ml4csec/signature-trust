@@ -15,6 +15,8 @@ import (
 
 var excludeMap = make(map[string]string)
 
+// Replacement holds the GitHub repository and version used as a replacement
+// for a given module in go.mod.
 type Replacement struct {
 	Repo    string
 	Version string
@@ -48,7 +50,7 @@ func ParseGo(modFile, token string, config types.LocalCheckConfig, timeCutoff *t
 					continue
 				}
 
-				version := strings.Split(parts[1], "+")[0]
+				version := strings.Split(parts[1], "+")[0] // Strip build metadata from version
 				version = strings.TrimPrefix(version, "v")
 				excludeMap[repoInfo.FullName] = version
 				fmt.Printf("Added to excludeMap: %s -> %s\n\n", repoInfo.FullName, version)
@@ -81,7 +83,7 @@ func ParseGo(modFile, token string, config types.LocalCheckConfig, timeCutoff *t
 	}
 
 	// Second pass: process dependencies and collect results
-	_, err = data.Seek(0, 0)
+	_, err = data.Seek(0, 0) // Rewind file for second pass
 	if err != nil {
 		return nil, fmt.Errorf("error rewinding go.mod: %v", err)
 	}

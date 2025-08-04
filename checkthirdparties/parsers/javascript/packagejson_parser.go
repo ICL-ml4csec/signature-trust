@@ -52,7 +52,7 @@ func ParsePackageJSON(file string, token string, config types.LocalCheckConfig, 
 
 	processDeps := func(depType string, deps map[string]string) {
 		for pkg, version := range deps {
-			depResult := processJSDependency(pkg, version, token, config, timeCutoff, outputFormat)
+			depResult := processJSDependency(pkg, version, depType, token, config, timeCutoff, outputFormat)
 			if depResult != nil {
 				results = append(results, *depResult)
 			}
@@ -66,36 +66,37 @@ func ParsePackageJSON(file string, token string, config types.LocalCheckConfig, 
 }
 
 // processJSDependency processes a single JavaScript dependency and returns a DependencyReport
-func processJSDependency(pkg, version, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+func processJSDependency(pkg, version, source, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
 	if helpers.IsTarballURL(version) || helpers.IsLocalPath(version) {
 		fmt.Printf("[WARN] Resolution not implemented for tarballs or local paths: %q (%q)\n", pkg, version)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  version,
 			Manifest: "package.json",
+			Source:   source,
 			Status:   "SKIPPED",
 			Issues:   []string{"Tarball or local path not supported"},
 		}
 	}
 
-	normalisedName, kind, cleanVersion := helpers.NormaliseDependencyName(pkg, version)
+	normalizedName, kind, cleanVersion := helpers.NormalizeDependencyName(pkg, version)
 
 	switch kind {
 	case "git":
-		return processGitDependency(pkg, normalisedName, cleanVersion, token, config, timeCutoff, outputFormat)
+		return processGitDependency(pkg, normalizedName, cleanVersion, token, config, timeCutoff, outputFormat)
 	case "github-shorthand":
-		return processGitHubShorthand(pkg, normalisedName, cleanVersion, token, config, timeCutoff, outputFormat)
+		return processGitHubShorthand(pkg, normalizedName, cleanVersion, token, config, timeCutoff, outputFormat)
 	default:
-		return processNpmDependency(pkg, normalisedName, version, cleanVersion, token, config, timeCutoff, outputFormat)
+		return processNpmDependency(pkg, normalizedName, version, cleanVersion, token, config, timeCutoff, outputFormat)
 	}
 }
 
 // processGitDependency processes a Git dependency and returns a DependencyReport
-func processGitDependency(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
-	fmt.Printf("[INFO] Git dependency for %q: %q\n", normalisedName, cleanVersion)
+func processGitDependency(pkg, normalizedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	fmt.Printf("[INFO] Git dependency for %q: %q\n", normalizedName, cleanVersion)
 	tag := helpers.ExtractGitTag(cleanVersion)
 	if tag == "" {
-		fmt.Printf("[WARN] No tag found in Git URL for %q\n", normalisedName)
+		fmt.Printf("[WARN] No tag found in Git URL for %q\n", normalizedName)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  cleanVersion,
@@ -108,7 +109,7 @@ func processGitDependency(pkg, normalisedName, cleanVersion, token string, confi
 	baseURL := strings.Split(cleanVersion, "#")[0]
 	repoInfo, err := helpers.ExtractRepoInfo(baseURL)
 	if err != nil {
-		fmt.Printf("[WARN] Invalid Git repository URL for %q: %v\n", normalisedName, err)
+		fmt.Printf("[WARN] Invalid Git repository URL for %q: %v\n", normalizedName, err)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  cleanVersion,
@@ -122,13 +123,13 @@ func processGitDependency(pkg, normalisedName, cleanVersion, token string, confi
 }
 
 // processGitHubShorthand processes a GitHub shorthand dependency and returns a DependencyReport
-func processGitHubShorthand(pkg, normalisedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
-	fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalisedName, cleanVersion)
+func processGitHubShorthand(pkg, normalizedName, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	fmt.Printf("[INFO] GitHub shorthand for %q: %q\n", normalizedName, cleanVersion)
 	gitURL := helpers.ExpandGitHubShorthand(cleanVersion)
 
 	repoInfo, err := helpers.ExtractRepoInfo(gitURL)
 	if err != nil {
-		fmt.Printf("[WARN] Invalid GitHub shorthand URL for %q: %v\n", normalisedName, err)
+		fmt.Printf("[WARN] Invalid GitHub shorthand URL for %q: %v\n", normalizedName, err)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  cleanVersion,
@@ -147,11 +148,11 @@ func processGitHubShorthand(pkg, normalisedName, cleanVersion, token string, con
 }
 
 // processNpmDependency processes an NPM dependency and returns a DependencyReport
-func processNpmDependency(pkg, normalisedName, version, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
-	url := fmt.Sprintf("https://registry.npmjs.org/%s", normalisedName)
+func processNpmDependency(pkg, normalizedName, version, cleanVersion, token string, config types.LocalCheckConfig, timeCutoff *time.Time, outputFormat string) *output.DependencyReport {
+	url := fmt.Sprintf("https://registry.npmjs.org/%s", normalizedName)
 	resp, err := client.DoGet(url, token)
 	if err != nil {
-		fmt.Printf("[NPM] Fetch failed for %s: %v\n", normalisedName, err)
+		fmt.Printf("[NPM] Fetch failed for %s: %v\n", normalizedName, err)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  version,
@@ -165,7 +166,7 @@ func processNpmDependency(pkg, normalisedName, version, cleanVersion, token stri
 	body, _ := io.ReadAll(resp.Body)
 	var npmResp NpmPackageResponse
 	if err := json.Unmarshal(body, &npmResp); err != nil {
-		fmt.Printf("[NPM] Error parsing NPM JSON for %s: %v\n", normalisedName, err)
+		fmt.Printf("[NPM] Error parsing NPM JSON for %s: %v\n", normalizedName, err)
 		return &output.DependencyReport{
 			Package:  pkg,
 			Version:  version,
