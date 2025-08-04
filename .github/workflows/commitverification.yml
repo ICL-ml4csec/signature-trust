@@ -39,7 +39,7 @@ jobs:
           echo "Checking branch: $BRANCH_NAME"
           go run ./main.go ${{ github.repository }} $BRANCH_NAME ${{ secrets.GITHUB_TOKEN }} \
             all "6 months" "" \
-            "false:false:false:false:true:false:false" \
+            "false:false:true:false:true:false:false" \
             "true:true:true:true:true:false:false" \
             json signature-report.json
 
