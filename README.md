@@ -266,3 +266,15 @@ Perfect for CI/CD integration and merge protection rules.
 - **Time-aware analysis**: Focus on recent commits and key activity
 - **Structured output**: Human-readable output and machine-readable JSON for automation
 
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details
