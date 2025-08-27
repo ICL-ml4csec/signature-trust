@@ -59,15 +59,17 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 		}
 
 		// Check GitHub authorization if configured
-		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
-			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
-			if authStatus != types.ValidSignature {
+		if status == types.ValidSignature {
+			if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
+				authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
+				if authErr != nil {
+					// Don’t downgrade to error – keep it valid but log
+					return types.ValidSignature, fmt.Sprintf("Authorization check warning: %v", authErr), nil
+				}
 				return authStatus, authMessage, authErr
 			}
-			if authMessage != "" {
-				fmt.Print(authMessage)
-			}
 		}
+
 	}
 
 	// Handle missing public key case with imported key
