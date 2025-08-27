@@ -28,16 +28,13 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 	}
 
 	for _, key := range gpgKeys {
-		if key.PublicKey != "" {
-			if err := ImportKeyDirectly(key.PublicKey); err != nil {
-				fmt.Printf("Warning: failed to import key %s from GitHub: %v\n", key.KeyID, err)
+		if key.RawKey != "" {
+			if err := ImportKeyDirectly(key.RawKey); err != nil {
 			}
 		}
-
 		for _, sub := range key.Subkeys {
-			if sub.PublicKey != "" {
-				if err := ImportKeyDirectly(sub.PublicKey); err != nil {
-					fmt.Printf("Warning: failed to import subkey %s: %v\n", sub.KeyID, err)
+			if sub.RawKey != "" {
+				if err := ImportKeyDirectly(sub.RawKey); err != nil {
 				}
 			}
 		}
@@ -56,8 +53,9 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 		// Subkeys may also be authorized signers if they have signing capability
 		for _, subkey := range key.Subkeys {
 			subkeyPrimaryID := utils.InterfaceToString(subkey.PrimaryKeyID)
-			if subkey.CanSign && (utils.NormalizeKeyID(subkey.KeyID) == utils.NormalizeKeyID(keyID) ||
-				utils.NormalizeKeyID(subkeyPrimaryID) == utils.NormalizeKeyID(keyID)) {
+			if subkey.CanSign &&
+				(utils.NormalizeKeyID(subkey.KeyID) == utils.NormalizeKeyID(keyID) ||
+					utils.NormalizeKeyID(subkeyPrimaryID) == utils.NormalizeKeyID(keyID)) {
 				return true, nil
 			}
 		}
