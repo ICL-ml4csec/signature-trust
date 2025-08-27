@@ -105,7 +105,7 @@ func main() {
 	_, err = helpers.GetSHAFromBranch(repo, branch, token)
 	if err != nil {
 		fmt.Printf("Could not get latest commit SHA for branch %s: %v\n", branch, err)
-		return
+		os.Exit(1)
 	}
 
 	// Parse time cutoff
@@ -169,7 +169,7 @@ func main() {
 	results, err := checksignature.CheckSignatureLocal(repo, "", repoConfig)
 	if err != nil {
 		fmt.Printf("Repository signature verification failed: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	summary := checksignature.ProcessSignatureResults(results, repoConfig)

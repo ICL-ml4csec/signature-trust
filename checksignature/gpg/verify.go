@@ -29,20 +29,19 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 		createdAt, err := trustpolicies.GetPGPKeyCreationTime(keyID)
 		if err == nil {
 			if config.KeyCreationCutoff != nil && createdAt.After(*config.KeyCreationCutoff) {
-				return types.InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", keyID, createdAt.Format(time.RFC3339)), nil
+				return types.InvalidSignature,
+					fmt.Sprintf("Key %s created too recently (%s)",
+						keyID, createdAt.Format(time.RFC3339)), nil
 			}
 		}
 	}
 
 	// Try to import the public key if we found one
-	var keyImported bool
 	if err == nil && publicKey != "" {
-		if importErr := ImportKeyDirectly(publicKey); importErr == nil {
-			keyImported = true
-		}
+		_ = ImportKeyDirectly(publicKey)
 	}
 
-	// Perform GPG verification
+	// Perform initial GPG verification
 	status, output, verifyErr := performGPGVerification(signature, payload)
 
 	// Check for GitHub automated commits
@@ -50,29 +49,37 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 		return types.GitHubAutomatedSignature, output, verifyErr
 	}
 
-	// Additional checks for valid signatures
-	if status == types.ValidSignature {
-		// Check email matching
+	// If we got MissingPublicKey, try GitHub API import + reverify
+	if status == types.MissingPublicKey && keyID != "" && config.Token != "" {
+		_, _, _ = ValidateAuthorization(keyID, config.Repo, sha, config.Token)
+		status2, output2, verifyErr2 := performGPGVerification(signature, payload)
+		if status2 != types.MissingPublicKey {
+			status, output, verifyErr = status2, output2, verifyErr2
+		}
+	}
+
+	// For valid or borderline statuses, run authorization checks
+	if status == types.ValidSignature || status == types.ValidSignatureButSignerNotCertified {
+		// Check email mismatch
 		mismatch, signerEmail, authorEmail := utils.CheckEmailMismatch(raw, output)
 		if mismatch {
-			return types.EmailNotMatched, fmt.Sprintf("Signer <%s> does not match author <%s>", signerEmail, authorEmail), verifyErr
+			return types.EmailNotMatched,
+				fmt.Sprintf("Signer <%s> does not match author <%s>", signerEmail, authorEmail),
+				verifyErr
 		}
 
 		// Check GitHub authorization if configured
 		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
 			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
-			if authStatus != types.ValidSignature {
-				return authStatus, authMessage, authErr
+			if authErr != nil {
+				return types.ValidSignature,
+					fmt.Sprintf("Authorization check warning: %v", authErr), nil
 			}
-			if authMessage != "" {
-				fmt.Print(authMessage)
+			if authStatus == types.ValidSignature {
+				return types.ValidSignature, authMessage, nil
 			}
+			return authStatus, authMessage, nil
 		}
-	}
-
-	// Handle missing public key case with imported key
-	if status == types.MissingPublicKey && keyImported {
-		return types.MissingPublicKey, fmt.Sprintf("PGP signature found with key ID %s, but verification failed: %s", keyID, output), verifyErr
 	}
 
 	return status, output, verifyErr

@@ -29,7 +29,11 @@ func CheckSignatureLocal(repoPath, sha string, config types.LocalCheckConfig) ([
 	var cloneURL string
 	if config.Token != "" {
 		// Use authenticated URL for private repos
-		cloneURL = fmt.Sprintf("https://%s@github.com/%s.git", config.Token, config.Repo)
+		cloneURL = fmt.Sprintf(
+			"https://x-access-token:%s@github.com/%s.git",
+			config.Token,
+			config.Repo,
+		)
 	} else {
 		// Use public URL
 		cloneURL = fmt.Sprintf("https://github.com/%s.git", config.Repo)
