@@ -27,6 +27,22 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 		return false, fmt.Errorf("failed to get user GPG keys: %v", err)
 	}
 
+	for _, key := range gpgKeys {
+		if key.PublicKey != "" {
+			if err := ImportKeyDirectly(key.PublicKey); err != nil {
+				fmt.Printf("Warning: failed to import key %s from GitHub: %v\n", key.KeyID, err)
+			}
+		}
+
+		for _, sub := range key.Subkeys {
+			if sub.PublicKey != "" {
+				if err := ImportKeyDirectly(sub.PublicKey); err != nil {
+					fmt.Printf("Warning: failed to import subkey %s: %v\n", sub.KeyID, err)
+				}
+			}
+		}
+	}
+
 	// Check if the provided signing key ID matches any registered GPG keys or subkeys
 	// on the GitHub account of the commit author.
 	for _, key := range gpgKeys {
