@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
+	"strings"
 
 	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
 	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
 )
 
@@ -24,26 +23,29 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 	// Extract public key and key ID from signature
 	publicKey, keyID, err := ExtractPublicKeyFromSignature(signature)
 
-	// Check key age if we have a key ID
-	if keyID != "" {
-		createdAt, err := trustpolicies.GetPGPKeyCreationTime(keyID)
-		if err == nil {
-			if config.KeyCreationCutoff != nil && createdAt.After(*config.KeyCreationCutoff) {
-				return types.InvalidSignature, fmt.Sprintf("Key %s created too recently (%s)", keyID, createdAt.Format(time.RFC3339)), nil
-			}
-		}
-	}
+	fmt.Printf("[DEBUG][PGP] sha=%s keyID(extracted)=%s err=%v\n", sha, keyID, err)
+	fmt.Printf("[DEBUG][PGP] repo=%s token?=%t timeCutoff?=%t keyAgeCutoff?=%t\n",
+		config.Repo, config.Token != "", config.TimeCutoff != nil, config.KeyCreationCutoff != nil)
 
 	// Try to import the public key if we found one
 	var keyImported bool
 	if err == nil && publicKey != "" {
 		if importErr := ImportKeyDirectly(publicKey); importErr == nil {
 			keyImported = true
+			fmt.Printf("[DEBUG][PGP] imported key from signature block (not GitHub)\n")
+		} else {
+			fmt.Printf("[DEBUG][PGP] failed to import key from signature block: %v\n", importErr)
 		}
 	}
 
 	// Perform GPG verification
 	status, output, verifyErr := performGPGVerification(signature, payload)
+
+	fmt.Printf("[DEBUG][PGP] gpg status=%s verifyErr=%v\n", status, verifyErr)
+	lines := strings.Split(output, "\n")
+	for i := 0; i < len(lines) && i < 8; i++ {
+		fmt.Printf("[DEBUG][PGP] gpg: %s\n", lines[i])
+	}
 
 	// Check for GitHub automated commits
 	if trustpolicies.IsGitHubAutomatedCommit(output, content, nil) {
@@ -51,25 +53,19 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 	}
 
 	// Additional checks for valid signatures
-	if status == types.ValidSignature {
-		// Check email matching
-		mismatch, signerEmail, authorEmail := utils.CheckEmailMismatch(raw, output)
-		if mismatch {
-			return types.EmailNotMatched, fmt.Sprintf("Signer <%s> does not match author <%s>", signerEmail, authorEmail), verifyErr
-		}
+	if status == types.ValidSignature || status == types.MissingPublicKey {
+		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
+			fmt.Printf("[DEBUG][PGP] calling ValidateAuthorization(keyID=%s repo=%s sha=%s)\n", keyID, config.Repo, sha)
+			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
+			fmt.Printf("[DEBUG][PGP] ValidateAuthorization -> status=%s err=%v msg=%q\n", authStatus, authErr, authMessage)
 
-		// Check GitHub authorization if configured
-		if status == types.ValidSignature {
-			if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
-				authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
-				if authErr != nil {
-					// Don’t downgrade to error – keep it valid but log
-					return types.ValidSignature, fmt.Sprintf("Authorization check warning: %v", authErr), nil
-				}
+			if authStatus != types.ValidSignature {
 				return authStatus, authMessage, authErr
 			}
+			if authMessage != "" {
+				fmt.Print(authMessage)
+			}
 		}
-
 	}
 
 	// Handle missing public key case with imported key
