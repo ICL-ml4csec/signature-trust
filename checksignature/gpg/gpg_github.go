@@ -27,6 +27,19 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 		return false, fmt.Errorf("failed to get user GPG keys: %v", err)
 	}
 
+	for _, key := range gpgKeys {
+		if key.RawKey != "" {
+			if err := ImportKeyDirectly(key.RawKey); err != nil {
+			}
+		}
+		for _, sub := range key.Subkeys {
+			if sub.RawKey != "" {
+				if err := ImportKeyDirectly(sub.RawKey); err != nil {
+				}
+			}
+		}
+	}
+
 	// Check if the provided signing key ID matches any registered GPG keys or subkeys
 	// on the GitHub account of the commit author.
 	for _, key := range gpgKeys {
@@ -40,8 +53,9 @@ func CheckKeyAuthorization(keyID, repo, commitSHA, token string) (bool, error) {
 		// Subkeys may also be authorized signers if they have signing capability
 		for _, subkey := range key.Subkeys {
 			subkeyPrimaryID := utils.InterfaceToString(subkey.PrimaryKeyID)
-			if subkey.CanSign && (utils.NormalizeKeyID(subkey.KeyID) == utils.NormalizeKeyID(keyID) ||
-				utils.NormalizeKeyID(subkeyPrimaryID) == utils.NormalizeKeyID(keyID)) {
+			if subkey.CanSign &&
+				(utils.NormalizeKeyID(subkey.KeyID) == utils.NormalizeKeyID(keyID) ||
+					utils.NormalizeKeyID(subkeyPrimaryID) == utils.NormalizeKeyID(keyID)) {
 				return true, nil
 			}
 		}

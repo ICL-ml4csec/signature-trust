@@ -41,6 +41,7 @@ type GitHubGPGKey struct {
 	ID           int         `json:"id"`
 	PrimaryKeyID interface{} `json:"primary_key_id"`
 	KeyID        string      `json:"key_id"`
+	RawKey       string      `json:"raw_key"`
 	PublicKey    string      `json:"public_key"`
 	Emails       []struct {
 		Email    string `json:"email"`
@@ -50,6 +51,7 @@ type GitHubGPGKey struct {
 		ID                int         `json:"id"`
 		PrimaryKeyID      interface{} `json:"primary_key_id"`
 		KeyID             string      `json:"key_id"`
+		RawKey            string      `json:"raw_key"` // <-- add this
 		PublicKey         string      `json:"public_key"`
 		CanSign           bool        `json:"can_sign"`
 		CanEncryptComms   bool        `json:"can_encrypt_comms"`
