@@ -1,13 +1,13 @@
 {
   "metadata": {
-    "generated_at": "2025-08-04T23:27:15.131625+01:00",
+    "generated_at": "2025-08-27T13:21:37.718497+01:00",
     "tool_version": "1.0.0",
     "analysis_type": "signature_verification"
   },
   "repository": {
     "name": "ICL-ml4csec/msc-hmj24",
-    "branch": "main",
-    "commits_checked": 47
+    "branch": "development",
+    "commits_checked": 54
   },
   "policy": {
     "accept_expired_keys": false,
@@ -19,17 +19,106 @@
     "accept_unauthorized_signatures": false
   },
   "summary": {
-    "total_commits": 47,
-    "valid_signatures": 46,
-    "accepted_by_policy": 47,
+    "total_commits": 54,
+    "valid_signatures": 52,
+    "accepted_by_policy": 54,
     "rejected_by_policy": 0,
     "status_breakdown": {
-      "github-automated-signature": 1,
-      "valid": 46
+      "github-automated-signature": 2,
+      "valid": 52
     },
     "security_score": 100
   },
   "commits": [
+    {
+      "sha": "21060cdf5c8602ab43ac73f92c8cca3de602150b",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-21T16:48:05Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
+    {
+      "sha": "e7f3397fb8cff1563b445011c17699e3100eb492",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-21T14:20:25Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
+    {
+      "sha": "86bb668c110012f5f3c4e83ed54bdebb3c9bddd4",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-05T10:05:07Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
+    {
+      "sha": "86553603aa12518f33d4e2ce283d8d6880cb6d93",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "121580397+hannajonsd@users.noreply.github.com",
+        "is_automated": true
+      },
+      "timestamp": "2025-08-04T22:29:34Z",
+      "signature_status": "github-automated-signature",
+      "policy_decision": true,
+      "hard_rejection": false,
+      "security_flags": [
+        "github_automated_signature"
+      ],
+      "raw_output": "gpg: Signature made Mon Aug  4 23:29:34 2025 BST\ngpg:                using RSA key B5690EEEBB952194\ngpg: BAD signature from \"GitHub \u003cnoreply@github.com\u003e\" [unknown]\n",
+      "error": "exit status 1"
+    },
+    {
+      "sha": "54ccece57ad59ecc3a3a3963cbb0b551aa3d1fcc",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-04T22:27:44Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
+    {
+      "sha": "6f370294dbf0aaeb07b5b33523ddbd256a68664f",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-04T22:22:06Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
+    {
+      "sha": "dd2d10493b0334fa7b57563d8f89ba6ee39f24ef",
+      "author": {
+        "name": "Hanna Margrét Jónsdóttir",
+        "email": "hanna.jonsdottir24@imperial.ac.uk",
+        "is_automated": false
+      },
+      "timestamp": "2025-08-04T22:10:52Z",
+      "signature_status": "valid",
+      "policy_decision": true,
+      "hard_rejection": false
+    },
     {
       "sha": "8ccf3d30b1980f8b0d601b8109d319265365b639",
       "author": {
@@ -40,8 +129,7 @@
       "timestamp": "2025-08-04T21:10:45Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:56 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "83ddb6f7828561c70b5df192f37121f3ae2f074a",
@@ -53,8 +141,7 @@
       "timestamp": "2025-08-04T19:25:00Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:56 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "d21384559cfa0cf23ae97dd1400191525c93c8b5",
@@ -66,8 +153,7 @@
       "timestamp": "2025-08-04T19:05:37Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:56 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "6a679fbfe7b0945b154f3cb71f0c14297d75fd85",
@@ -79,8 +165,7 @@
       "timestamp": "2025-08-04T19:04:07Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:55 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "b7809173787226c9ba1efa6189105f8fbfd95e9b",
@@ -92,8 +177,7 @@
       "timestamp": "2025-08-04T18:57:15Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:55 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "1b78e9882640d0500c1d6f7b7c9236a8c64da287",
@@ -105,8 +189,7 @@
       "timestamp": "2025-08-04T18:54:13Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:55 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "dcf9b80e40fcb73d7e4e60f405278ddff0f510e3",
@@ -118,8 +201,7 @@
       "timestamp": "2025-08-04T18:07:09Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:55 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "c7f70702ab1344ad11670b741d3e009b7c92c494",
@@ -131,8 +213,7 @@
       "timestamp": "2025-08-04T16:50:50Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:54 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "34aeb25a28e088f26e5278dfcd6736d57d40aa81",
@@ -144,8 +225,7 @@
       "timestamp": "2025-08-04T16:47:19Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:54 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "dc3d025432316bf18d7c6cc59700c3b47351c6e4",
@@ -157,8 +237,7 @@
       "timestamp": "2025-08-04T16:00:14Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:54 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "ea7f80751da580b1bc6ffc05ed9106eb690adb82",
@@ -170,8 +249,7 @@
       "timestamp": "2025-08-04T13:22:35Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:53 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "1f6447fb9b90a1e9958d7d0bde0bc0df17b3779a",
@@ -183,8 +261,7 @@
       "timestamp": "2025-08-03T20:17:45Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:53 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "d0824600929ad31eeb4cf590fbe95127064a62a0",
@@ -196,8 +273,7 @@
       "timestamp": "2025-08-03T20:05:05Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:53 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "f5437c8910c9baf146bf6e7bf718e8b346108798",
@@ -209,8 +285,7 @@
       "timestamp": "2025-08-03T19:34:30Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:52 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "2beebe80d21977889e1a95e06681c8a994d49b75",
@@ -222,8 +297,7 @@
       "timestamp": "2025-08-03T18:25:38Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:52 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "ae46e249b685fbe2b198d68eadd5991cac503dbb",
@@ -235,8 +309,7 @@
       "timestamp": "2025-08-03T18:03:37Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:52 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "d12b19dd355949b49910db45637d40f9237e5f30",
@@ -248,8 +321,7 @@
       "timestamp": "2025-08-03T17:07:28Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:51 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "98b05298b93ce5b0f5c7844ca7ef2923aba2847d",
@@ -261,8 +333,7 @@
       "timestamp": "2025-08-03T11:02:54Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:51 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "332213555a91036dbd281d6d25c2e338bd6a7084",
@@ -274,8 +345,7 @@
       "timestamp": "2025-07-31T16:02:58Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:51 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "c3f61d82d9904315a19ee76fe1f2c145a7cff72e",
@@ -287,8 +357,7 @@
       "timestamp": "2025-07-31T15:01:44Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:51 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "4b0740d8c690da308ef30e2dc70f23580ace9405",
@@ -300,8 +369,7 @@
       "timestamp": "2025-07-30T16:56:56Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:50 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "97e7a3ae3cab648fd44288b51533e0c0d30765df",
@@ -313,8 +381,7 @@
       "timestamp": "2025-07-30T12:46:32Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:50 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "1c46616620175441abffe2aafb4c1abfa53abb42",
@@ -326,8 +393,7 @@
       "timestamp": "2025-07-29T16:35:18Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:50 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "294a0bbb03740d6fab826d3fddf937a3f62cff24",
@@ -339,8 +405,7 @@
       "timestamp": "2025-07-28T13:21:06Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:49 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "9a84206f782d8335a8546498c9d774bb3ae44755",
@@ -352,8 +417,7 @@
       "timestamp": "2025-07-28T12:39:18Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:49 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "c632feb00e8ce33288a896803ac1d38c21809ec9",
@@ -365,8 +429,7 @@
       "timestamp": "2025-07-25T15:44:56Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:49 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "e52207a7810ad668712da8e4f937516df1512502",
@@ -378,8 +441,7 @@
       "timestamp": "2025-07-23T21:47:48Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:48 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "35bd81bc00ca25bee6854e439b35af7a6c81f5dc",
@@ -391,8 +453,7 @@
       "timestamp": "2025-07-13T23:22:40Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:48 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "3ccb1fe8e14b300e1f12ca2c3675991871aca58d",
@@ -404,8 +465,7 @@
       "timestamp": "2025-07-13T22:16:20Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:48 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "dbf244d284ade3f131b92e0432884d99a59418eb",
@@ -417,8 +477,7 @@
       "timestamp": "2025-07-12T18:06:54Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:48 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "0433418ac91a1902a63ec2c58255719c586da3f2",
@@ -430,8 +489,7 @@
       "timestamp": "2025-07-11T20:02:43Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:47 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "999fea9159f54a9e8a144979b995ba901a98a489",
@@ -443,8 +501,7 @@
       "timestamp": "2025-07-11T19:59:19Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:47 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "3b205347f23ea5eedfa7648d934bb7fcba430a6d",
@@ -456,8 +513,7 @@
       "timestamp": "2025-07-10T22:40:19Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:47 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "0163306ccada5ad787a8a031b37cce754f4d79cf",
@@ -469,8 +525,7 @@
       "timestamp": "2025-07-07T16:40:15Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:46 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "e13da0894db91787b4a9fbb7f12eb26a2a6b68a9",
@@ -482,8 +537,7 @@
       "timestamp": "2025-07-01T20:01:46Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:46 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "c37cb73e28be196bf423e27477514ada54ab03f6",
@@ -495,8 +549,7 @@
       "timestamp": "2025-07-01T19:26:37Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:46 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "01065a4306eaa817f89ee237081a546ba48379b5",
@@ -508,8 +561,7 @@
       "timestamp": "2025-06-26T21:22:33Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:45 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "48c19c28805133783dd99ec6a74f0848aaf25fc5",
@@ -521,8 +573,7 @@
       "timestamp": "2025-06-26T13:10:38Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:45 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "542c064b4ba71623f6ee2932d42d0b44f473512c",
@@ -534,8 +585,7 @@
       "timestamp": "2025-06-26T13:02:54Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:45 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "1861aba55e5ecbe4f0abd3f1018b38d76e5c0126",
@@ -547,8 +597,7 @@
       "timestamp": "2025-06-25T16:39:27Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:44 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "e2b241e0d0f290498f93ce010f4af0be19076e1e",
@@ -560,8 +609,7 @@
       "timestamp": "2025-06-24T10:54:31Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:44 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "48cb89c1d8ab9320217db88b6434744c25115b07",
@@ -573,8 +621,7 @@
       "timestamp": "2025-06-23T19:13:37Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:44 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "659389f780305e14d4cf7ac9369636a91f4ec88e",
@@ -586,8 +633,7 @@
       "timestamp": "2025-06-23T10:36:56Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:44 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "f0021de066a16e8b00d8dda1e64395e6872a437d",
@@ -615,8 +661,7 @@
       "timestamp": "2025-06-19T17:15:49Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:43 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "066fa1bf332f125db66a6478bb4110ead4dc435b",
@@ -628,8 +673,7 @@
       "timestamp": "2025-06-16T20:57:40Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:43 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     },
     {
       "sha": "f5f5ec53ac9e309c430098477dd9a7c7669328f2",
@@ -641,8 +685,7 @@
       "timestamp": "2025-06-16T20:49:03Z",
       "signature_status": "valid",
       "policy_decision": true,
-      "hard_rejection": false,
-      "raw_output": "gpg: Signature made Mon Aug  4 22:47:42 2025 BST\ngpg:                using RSA key 98F1E35619A2E2D48B5B4698069EFF9994E8733B\ngpg: Good signature from \"Hanna Jonsdottir \u003channa.jonsdottir24@imperial.ac.uk\u003e\" [ultimate]\n"
+      "hard_rejection": false
     }
   ]
 }

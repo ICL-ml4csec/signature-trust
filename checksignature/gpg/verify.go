@@ -68,6 +68,7 @@ func Verify(raw []byte, sha string, config types.LocalCheckConfig) (types.Signat
 				verifyErr
 		}
 
+		// Check GitHub authorization if configured
 		if config.Token != "" && config.Repo != "" && sha != "" && keyID != "" {
 			authStatus, authMessage, authErr := ValidateAuthorization(keyID, config.Repo, sha, config.Token)
 			if authErr != nil {
