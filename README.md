@@ -2,6 +2,14 @@
 
 Verify that **every commit on your branch and in your third‑party dependencies** has a valid cryptographic signature with comprehensive policy enforcement and structured reporting.
 
+## Signed Commits Required
+
+**This repository requires all commits to be cryptographically signed.** 
+
+**[Setup Guide →](SETUP_SIGNING.md)** | Supports GPG & SSH signing
+
+---
+
 ## Quick‑Start
 
 > **Personal Access Token (PAT)**: Generate one at **Settings → Developer settings → Personal access tokens → Tokens (classic)**. The token only needs `repo` → `public_repo` (public) or `repo` (private) scope so that the API can list commits and tags.
