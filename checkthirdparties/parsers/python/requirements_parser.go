@@ -39,15 +39,20 @@ func parseRequirementLine(line string) (string, string) {
 
 // extractRepoURLFromPyPI extracts the repository URL from the PyPI response
 func extractRepoURLFromPyPI(pypiResp pypiResponse) string {
-	if url, ok := pypiResp.Info.ProjectURLs["Homepage"]; ok && url != "" {
-		return url
+	// Create a case-insensitive lookup
+	lowerProjectURLs := make(map[string]string)
+	for k, v := range pypiResp.Info.ProjectURLs {
+		lowerProjectURLs[strings.ToLower(k)] = v
 	}
-	if url, ok := pypiResp.Info.ProjectURLs["Source"]; ok && url != "" {
-		return url
+	
+	// Check for repository URLs (case-insensitive)
+	keys := []string{"homepage", "source", "repository"}
+	for _, key := range keys {
+		if url, ok := lowerProjectURLs[key]; ok && url != "" {
+			return url
+		}
 	}
-	if url, ok := pypiResp.Info.ProjectURLs["Repository"]; ok && url != "" {
-		return url
-	}
+	
 	if pypiResp.Info.HomePage != "" {
 		return pypiResp.Info.HomePage
 	}
