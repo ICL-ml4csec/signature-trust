@@ -155,5 +155,7 @@ func processPythonDependency(line, token string, config types.LocalCheckConfig, 
 		}
 	}
 
+	config.Repo = repoInfo.FullName
+	
 	return parsers.CheckSignaturesAndBuildReport(repoInfo, packageName, version, token, config, timeCutoff, outputFormat, "requirements.txt")
 }

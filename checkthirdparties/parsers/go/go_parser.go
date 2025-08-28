@@ -241,6 +241,8 @@ func parseGoDependencyLineWithResult(line string, token string, config types.Loc
 		}
 	}
 
+	config.Repo = repoInfo.FullName
+
 	// Check signatures using repo's full name
 	signatureResults, err := checksignature.CheckSignatureLocal(repoInfo.FullName, sha, config)
 	if err != nil {

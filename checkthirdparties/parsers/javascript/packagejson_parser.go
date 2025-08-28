@@ -216,5 +216,7 @@ func processNpmDependency(pkg, normalizedName, version, cleanVersion, token stri
 		}
 	}
 
+	config.Repo = repoInfo.FullName
+
 	return parsers.CheckSignaturesAndBuildReport(repoInfo, pkg, resolved, token, config, timeCutoff, outputFormat, "package.json")
 }
