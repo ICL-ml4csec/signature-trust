@@ -3,9 +3,9 @@ package gpg
 import (
 	"fmt"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/github"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/github"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/utils"
 )
 
 // CheckKeyAuthorization verifies if a GPG key is registered on the commit author's GitHub account.

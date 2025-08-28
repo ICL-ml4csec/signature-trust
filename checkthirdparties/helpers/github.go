@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/signature-trust/client"
 )
 
 type GitHubTag struct {

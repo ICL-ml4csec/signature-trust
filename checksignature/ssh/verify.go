@@ -9,9 +9,9 @@ import (
 	"hash"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
-	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/utils"
+	"github.com/ICL-ml4csec/signature-trust/trustpolicies"
 )
 
 // computeSignedPayload constructs the SSH payload to verify against the signature,

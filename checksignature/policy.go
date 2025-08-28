@@ -3,7 +3,7 @@ package checksignature
 import (
 	"fmt"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // IsSignatureAcceptable determines if a signature status should be accepted based on config

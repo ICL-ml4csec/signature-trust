@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/signature-trust/client"
 )
 
 // IsValidSemver checks if a string is a valid semantic version

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // HandleJSONOutput writes or prints a JSON report of signature verification results.

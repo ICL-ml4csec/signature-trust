@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/signature-trust/checksignature"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/output"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checkthirdparties/helpers"
 )
 
 // CheckSignaturesAndBuildReport checks signatures for a given package version and builds a detailed report

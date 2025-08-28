@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/gpg"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/ssh"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
-	"github.com/ICL-ml4csec/msc-hmj24/trustpolicies"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/gpg"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/output"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/ssh"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/signature-trust/trustpolicies"
 )
 
 // CheckSignatureLocal performs signature verification on a Git repository
