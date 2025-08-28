@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers"
-	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/output"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/signature-trust/checkthirdparties/parsers"
+	"github.com/ICL-ml4csec/signature-trust/client"
 )
 
 type pypiResponse struct {

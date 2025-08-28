@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // ExtractPublicKeyFromSignature extracts a GPG public key and its key ID from a given ASCII-armored signature.

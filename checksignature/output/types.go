@@ -3,7 +3,7 @@ package output
 import (
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // SignatureSummary summarizes signature check results for a repository

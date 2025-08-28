@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/github"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
-	"github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/helpers"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/github"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/utils"
+	"github.com/ICL-ml4csec/signature-trust/checkthirdparties/helpers"
 )
 
 // GetPGPKeyCreationTime retrieves the creation time of a PGP key by its ID

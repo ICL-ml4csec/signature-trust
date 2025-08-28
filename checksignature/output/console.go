@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // PrintRepositoryConsoleOutput displays a detailed report of signature verification results

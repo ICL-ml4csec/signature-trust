@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	goparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/go"
-	jsparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/javascript"
-	pyparser "github.com/ICL-ml4csec/msc-hmj24/checkthirdparties/parsers/python"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/output"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	goparser "github.com/ICL-ml4csec/signature-trust/checkthirdparties/parsers/go"
+	jsparser "github.com/ICL-ml4csec/signature-trust/checkthirdparties/parsers/javascript"
+	pyparser "github.com/ICL-ml4csec/signature-trust/checkthirdparties/parsers/python"
 )
 
 // fileExists checks if a file exists at the given path

@@ -3,8 +3,8 @@ package helpers
 import (
 	"time"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/output"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/output"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
 )
 
 // CreateTimeRange creates a time range for dependency checks based on the configuration

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/types"
-	"github.com/ICL-ml4csec/msc-hmj24/checksignature/utils"
-	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/types"
+	"github.com/ICL-ml4csec/signature-trust/checksignature/utils"
+	"github.com/ICL-ml4csec/signature-trust/client"
 )
 
 // GetUserGPGKeys fetches a user's GPG keys from GitHub

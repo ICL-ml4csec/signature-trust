@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ICL-ml4csec/msc-hmj24/client"
+	"github.com/ICL-ml4csec/signature-trust/client"
 )
 
 // GetCommitContributor gets the GitHub username of the commit author

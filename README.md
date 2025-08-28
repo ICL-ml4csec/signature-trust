@@ -42,18 +42,18 @@ go run ./main.go <owner/repo> <branch> <PAT> <commits> <time-period> <key-age-pe
 export GITHUB_TOKEN="ghp_yourTokenHere"
 
 # Check last 6 months with strict dependency policy
-go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "6 months" "1 week" \
+go run ./main.go ICL-ml4csec/signature-trust main "$GITHUB_TOKEN" all "6 months" "1 week" \
   "false:false:false:false:true:false:false" \
   "true:true:true:true:true:false:false"
 
 # Generate JSON report with 1 year time-range
-go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "1 year" "30 days" \
+go run ./main.go ICL-ml4csec/signature-trust main "$GITHUB_TOKEN" all "1 year" "30 days" \
   "false:false:false:false:true:false:false" \
   "true:true:true:true:true:false:false" \
   json security-report.json
 
 # Short format with relaxed policies
-go run ./main.go ICL-ml4csec/msc-hmj24 main "$GITHUB_TOKEN" all "3m" "1w" \
+go run ./main.go ICL-ml4csec/signature-trust main "$GITHUB_TOKEN" all "3m" "1w" \
   "true:true:true:true:true:false:false" \
   "true:true:true:true:true:true:false"
 ```
@@ -111,7 +111,7 @@ Commits newer than 6 months (26 Feb 2025)
 Key age policy: Signing keys must be older than 1 week
 
 == RESULTS ==
-Signature Check Summary (ICL-ml4csec/msc-hmj24):
+Signature Check Summary (ICL-ml4csec/signature-trust):
     Total commits: 37
     Valid signatures: 30
     Policy Result: PASSED
@@ -186,7 +186,7 @@ jobs:
           fi
 
       - name: Verify Signatures
-        uses: ICL-ml4csec/msc-hmj24@v1.0.0
+        uses: ICL-ml4csec/signature-trust@v1.1.1
         with:
           repository: ${{ github.repository }}
           branch: ${{ env.BRANCH_NAME }}
@@ -199,7 +199,7 @@ jobs:
 
 ```yaml
 - name: Strict Security Verification
-  uses: ICL-ml4csec/msc-hmj24@v1.0.0
+  uses: ICL-ml4csec/signature-trust@v1.1.1
   with:
     repository: ${{ github.repository }}
     branch: ${{ env.BRANCH_NAME }}
