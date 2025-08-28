@@ -138,7 +138,7 @@ func processPythonDependency(line, token string, config types.LocalCheckConfig, 
 
 	repoURL := extractRepoURLFromPyPI(pypiResp)
 	if repoURL == "" {
-		fmt.Printf("No repository URL found for %s\n", packageName)
+		fmt.Printf("WARNING: No repository URL found for %s\n", packageName)
 		return &output.DependencyReport{
 			Package:  packageName,
 			Version:  version,
@@ -150,7 +150,7 @@ func processPythonDependency(line, token string, config types.LocalCheckConfig, 
 
 	repoInfo, err := helpers.ExtractRepoInfo(repoURL)
 	if err != nil {
-		fmt.Printf("Invalid repository URL for %s: %v\n", packageName, err)
+		fmt.Printf("WARNING: Invalid repository URL for %s: %v\n", packageName, err)
 		return &output.DependencyReport{
 			Package:  packageName,
 			Version:  version,
