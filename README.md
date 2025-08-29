@@ -186,20 +186,28 @@ jobs:
           fi
 
       - name: Verify Signatures
-        uses: ICL-ml4csec/signature-trust@v1.1.1
+        uses: ICL-ml4csec/signature-trust@v1.1.2
         with:
           repository: ${{ github.repository }}
           branch: ${{ env.BRANCH_NAME }}
           token: ${{ secrets.GITHUB_TOKEN }}
           repo-policy: "false:false:false:false:true:false:false"
           deps-policy: "true:true:true:true:true:false:false"
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signature-verification-report
+          path: signature-report.json
+
 ```
 
 ### Advanced Configuration
 
 ```yaml
 - name: Strict Security Verification
-  uses: ICL-ml4csec/signature-trust@v1.1.1
+  uses: ICL-ml4csec/signature-trust@v1.1.2
   with:
     repository: ${{ github.repository }}
     branch: ${{ env.BRANCH_NAME }}
@@ -216,18 +224,6 @@ jobs:
 ### Integration with Merge Protection
 
 Enable "Require status checks to pass before merging" in your repository settings and select the signature verification job to prevent merging unsigned commits.
-
-### Downloading Reports
-The action generates detailed JSON reports that can be downloaded as artifacts:
-
-```yaml
-- name: Upload verification report
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: signature-verification-report
-    path: signature-report.json
-```
 
 ## Policy Configuration
 
