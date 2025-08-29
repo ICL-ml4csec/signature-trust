@@ -186,7 +186,7 @@ jobs:
           fi
 
       - name: Verify Signatures
-        uses: ICL-ml4csec/signature-trust@v1.1.2
+        uses: ICL-ml4csec/signature-trust@v1.1.3
         with:
           repository: ${{ github.repository }}
           branch: ${{ env.BRANCH_NAME }}
@@ -207,7 +207,7 @@ jobs:
 
 ```yaml
 - name: Strict Security Verification
-  uses: ICL-ml4csec/signature-trust@v1.1.2
+  uses: ICL-ml4csec/signature-trust@v1.1.3
   with:
     repository: ${{ github.repository }}
     branch: ${{ env.BRANCH_NAME }}
