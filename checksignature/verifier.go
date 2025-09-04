@@ -248,10 +248,10 @@ func applyPolicy(status types.SignatureStatus, config types.LocalCheckConfig) bo
 		return config.AcceptExpiredKeys
 
 	case types.ValidSignatureButSignerNotCertified:
-		return config.AcceptUncertifiedSigner
+		return config.AcceptUncertifiedKeys
 
 	case types.EmailNotMatched:
-		return config.AcceptEmailMismatches
+		return config.AcceptEmailMismatch
 
 	case types.ValidSignatureButUnregisteredKey:
 		return config.AcceptUnregisteredKeys

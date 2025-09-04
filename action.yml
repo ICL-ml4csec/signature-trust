@@ -27,11 +27,11 @@ inputs:
     required: false
     default: ""
   repo-policy:
-    description: "Repository policy (colon-separated: expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized)"
+    description: "Repository policy (colon-separated: expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
     required: false
     default: "false:false:false:false:true:false:false"
   deps-policy:
-    description: "Dependencies policy (colon-separated: expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized)"
+    description: "Dependencies policy (colon-separated: expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
     required: false
     default: "true:true:true:true:true:true:true"
   output-format:

@@ -19,7 +19,7 @@ func IsSignatureAcceptable(status types.SignatureStatus, config types.LocalCheck
 		return false, "Expired key rejected by policy"
 
 	case types.ValidSignatureButSignerNotCertified:
-		if config.AcceptUncertifiedSigner {
+		if config.AcceptUncertifiedKeys {
 			return true, "Uncertified key accepted by policy"
 		}
 		return false, "Uncertified key rejected by policy"
@@ -37,7 +37,7 @@ func IsSignatureAcceptable(status types.SignatureStatus, config types.LocalCheck
 		return false, "Missing public key rejected by policy"
 
 	case types.EmailNotMatched:
-		if config.AcceptEmailMismatches {
+		if config.AcceptEmailMismatch {
 			return true, "Email mismatch accepted by policy"
 		}
 		return false, "Email mismatch rejected by policy"
