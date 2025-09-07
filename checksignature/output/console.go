@@ -201,19 +201,19 @@ func getPolicyDependentRejections(summary SignatureSummary, config types.LocalCh
 
 		switch {
 		case strings.Contains(description, "Missing public key") && !config.AcceptMissingPublicKey:
-			rejections["Missing keys on GitHub"] = append(rejections["Missing keys on GitHub"], commit)
+			rejections["Missing public keys"] = append(rejections["Missing public keys"], commit)
 		case strings.Contains(description, "not found") && !config.AcceptMissingPublicKey:
-			rejections["Missing keys on GitHub"] = append(rejections["Missing keys on GitHub"], commit)
-		case strings.Contains(description, "mismatch") && !config.AcceptEmailMismatches:
+			rejections["Missing public keys"] = append(rejections["Missing public keys"], commit)
+		case strings.Contains(description, "mismatch") && !config.AcceptEmailMismatch:
 			rejections["Email mismatches"] = append(rejections["Email mismatches"], commit)
 		case strings.Contains(description, "created") && strings.Contains(description, "ago"):
 			rejections["Recent keys (newer than policy)"] = append(rejections["Recent keys (newer than policy)"], commit)
 		case strings.Contains(description, "expired") && !config.AcceptExpiredKeys:
 			rejections["Expired keys"] = append(rejections["Expired keys"], commit)
-		case strings.Contains(description, "not certified") && !config.AcceptUncertifiedSigner:
-			rejections["Uncertified signers"] = append(rejections["Uncertified signers"], commit)
+		case strings.Contains(description, "not certified") && !config.AcceptUncertifiedKeys:
+			rejections["Uncertified keys"] = append(rejections["Uncertified keys"], commit)
 		case strings.Contains(description, "unauthorized") && !config.AcceptUnregisteredKeys:
-			rejections["Unregistered signers"] = append(rejections["Unregistered signers"], commit)
+			rejections["Unregistered keys"] = append(rejections["Unregistered keys"], commit)
 		case strings.Contains(description, "Unsigned commit") && !config.AcceptUnsignedCommits:
 			rejections["Unsigned commits"] = append(rejections["Unsigned commits"], commit)
 		case strings.Contains(description, "No signature") && !config.AcceptUnsignedCommits:

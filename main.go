@@ -135,10 +135,10 @@ func main() {
 		CommitsToCheck:          -1,
 		AcceptExpiredKeys:       repoPolicy.AcceptExpiredKeys,
 		AcceptUnsignedCommits:   false,
-		AcceptEmailMismatches:   repoPolicy.AcceptEmailMismatches,
-		AcceptUncertifiedSigner: repoPolicy.AcceptUncertifiedSigner,
+		AcceptEmailMismatch:     repoPolicy.AcceptEmailMismatch,
+		AcceptUncertifiedKeys:   repoPolicy.AcceptUncertifiedKeys,
 		AcceptMissingPublicKey:  repoPolicy.AcceptMissingPublicKey,
-		AcceptGitHubAutomated:   true,
+		AcceptGitHubAutomated:   repoPolicy.AcceptGitHubAutomated,
 		AcceptUnregisteredKeys:  repoPolicy.AcceptUnregisteredKeys,
 		TimeCutoff:              nil,
 		KeyCreationCutoff:       keyCreationTimeCutoff,
@@ -153,8 +153,8 @@ func main() {
 		CommitsToCheck:          commitsToCheck,
 		AcceptExpiredKeys:       depsPolicy.AcceptExpiredKeys,
 		AcceptUnsignedCommits:   depsPolicy.AcceptUnsignedCommits,
-		AcceptEmailMismatches:   depsPolicy.AcceptEmailMismatches,
-		AcceptUncertifiedSigner: depsPolicy.AcceptUncertifiedSigner,
+		AcceptEmailMismatch:     depsPolicy.AcceptEmailMismatch,
+		AcceptUncertifiedKeys:   depsPolicy.AcceptUncertifiedKeys,
 		AcceptMissingPublicKey:  depsPolicy.AcceptMissingPublicKey,
 		AcceptGitHubAutomated:   depsPolicy.AcceptGitHubAutomated,
 		AcceptUnregisteredKeys:  depsPolicy.AcceptUnregisteredKeys,
@@ -233,12 +233,12 @@ func parsePolicy(policyStr string) (output.PolicyConfiguration, error) {
 		return output.PolicyConfiguration{}, fmt.Errorf("invalid expired keys setting: %v", err)
 	}
 
-	policy.AcceptEmailMismatches, err = strconv.ParseBool(parts[1])
+	policy.AcceptEmailMismatch, err = strconv.ParseBool(parts[1])
 	if err != nil {
 		return output.PolicyConfiguration{}, fmt.Errorf("invalid untrusted signers setting: %v", err)
 	}
 
-	policy.AcceptUncertifiedSigner, err = strconv.ParseBool(parts[2])
+	policy.AcceptUncertifiedKeys, err = strconv.ParseBool(parts[2])
 	if err != nil {
 		return output.PolicyConfiguration{}, fmt.Errorf("invalid uncertified keys setting: %v", err)
 	}

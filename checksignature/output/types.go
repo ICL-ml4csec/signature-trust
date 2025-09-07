@@ -91,13 +91,13 @@ type TimeRange struct {
 
 // PolicyConfiguration reflects the signature acceptance rules used
 type PolicyConfiguration struct {
-	AcceptExpiredKeys       bool `json:"accept_expired_keys"`
-	AcceptUnsignedCommits   bool `json:"accept_unsigned_commits"`
-	AcceptEmailMismatches   bool `json:"accept_untrusted_signers"`
-	AcceptUncertifiedSigner bool `json:"accept_uncertified_keys"`
-	AcceptMissingPublicKey  bool `json:"accept_missing_public_key"`
-	AcceptGitHubAutomated   bool `json:"accept_github_automated"`
-	AcceptUnregisteredKeys  bool `json:"accept_unauthorized_signatures"`
+    AcceptExpiredKeys      bool `json:"accept_expired_keys"`
+    AcceptUnsignedCommits  bool `json:"accept_unsigned_commits"`
+    AcceptEmailMismatch    bool `json:"accept_email_mismatch"`
+    AcceptUncertifiedKeys  bool `json:"accept_uncertified_keys"`
+    AcceptMissingPublicKey bool `json:"accept_missing_public_key"`
+    AcceptGitHubAutomated  bool `json:"accept_github_automated"`
+    AcceptUnregisteredKeys bool `json:"accept_unregistered_keys"`
 }
 
 // CommitAnalysis stores per-commit evaluation and decisions

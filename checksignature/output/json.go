@@ -90,8 +90,8 @@ func BuildPolicyConfiguration(config types.LocalCheckConfig) PolicyConfiguration
 	policy := PolicyConfiguration{
 		AcceptExpiredKeys:       config.AcceptExpiredKeys,
 		AcceptUnsignedCommits:   config.AcceptUnsignedCommits,
-		AcceptEmailMismatches:   config.AcceptEmailMismatches,
-		AcceptUncertifiedSigner: config.AcceptUncertifiedSigner,
+		AcceptEmailMismatch:     config.AcceptEmailMismatch,
+		AcceptUncertifiedKeys: 	 config.AcceptUncertifiedKeys,
 		AcceptMissingPublicKey:  config.AcceptMissingPublicKey,
 		AcceptGitHubAutomated:   config.AcceptGitHubAutomated,
 		AcceptUnregisteredKeys:  config.AcceptUnregisteredKeys,

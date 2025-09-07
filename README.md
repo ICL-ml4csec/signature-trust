@@ -34,7 +34,7 @@ go run ./main.go <owner/repo> <branch> <PAT> <commits> <time-period> <key-age-pe
 - `[output-format]`: "console" (default) or "json"
 - `[output-file]`: Path for JSON report (when using json format)
 
-**Policy Format:** `expired:untrusted:uncertified:missingkey:github-automated:unsigned:unauthorized` (true/false for each)
+**Policy Format:** `expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered` (true/false for each)
 
 ### Examples
 
@@ -186,7 +186,7 @@ jobs:
           fi
 
       - name: Verify Signatures
-        uses: ICL-ml4csec/signature-trust@v1.1.2
+        uses: ICL-ml4csec/signature-trust@v1.1.4
         with:
           repository: ${{ github.repository }}
           branch: ${{ env.BRANCH_NAME }}
@@ -207,7 +207,7 @@ jobs:
 
 ```yaml
 - name: Strict Security Verification
-  uses: ICL-ml4csec/signature-trust@v1.1.2
+  uses: ICL-ml4csec/signature-trust@v1.1.4
   with:
     repository: ${{ github.repository }}
     branch: ${{ env.BRANCH_NAME }}
@@ -229,19 +229,20 @@ Enable "Require status checks to pass before merging" in your repository setting
 
 Configure signature acceptance policies with seven boolean flags:
 
-1. **expired**: Accept signatures that are cryptographically valid but made with expired keys (valid-but-expired-key)
+1. **expired**: Accept valid signatures made with expired keys (valid-but-expired-key)
 
-2. **untrusted**: Accept signatures where the signer's email does not match the commit author (signed-but-untrusted-email)
+2. **email-mismatch**: Accept signatures where signer email != commit author (signed-but-untrusted-email)
 
-3. **uncertified**: Accept signatures made with uncertified keys — valid but not certified by a trusted authority (valid-but-not-certified)
+3. **uncertified**: Accept signatures valid but not certified (valid-but-not-certified)
 
-4. **missingkey**: Accept signatures when the commit is signed but the public key is not available for verification (signed-but-missing-key)
+4. **missingkey**: Accept when the public key isn't available (signed-but-missing-key)
 
-5. **github-automated**: Accept GitHub's automated commit signatures, such as those from web UI merges (github-automated-signature)
+5. **github-automated**: Accept GitHub's automated commit signatures (github-automated-signature)
 
-6. **unsigned**: Accept commits that are not signed at all (unsigned)
+6. **unsigned**: Accept commits without any signature (unsigned)
 
-7. **unauthorized**: Accept signatures that are valid but made with a key not linked to the author’s GitHub account (valid-but-key-not-on-github)
+7. **unregistered**: Accept valid signatures made with keys not linked to the author’s GitHub account (valid-but-key-not-on-github)
+
 
 **Example Policies:**
 

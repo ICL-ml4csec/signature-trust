@@ -25,8 +25,8 @@ type LocalCheckConfig struct {
 	CommitsToCheck          int
 	AcceptExpiredKeys       bool
 	AcceptUnsignedCommits   bool
-	AcceptEmailMismatches   bool
-	AcceptUncertifiedSigner bool
+	AcceptEmailMismatch     bool
+	AcceptUncertifiedKeys   bool
 	AcceptMissingPublicKey  bool
 	AcceptGitHubAutomated   bool
 	AcceptUnregisteredKeys  bool
