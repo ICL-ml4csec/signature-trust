@@ -27,17 +27,17 @@ inputs:
     required: false
     default: ""
   repo-policy:
-    description: "Repository policy (colon-separated: expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
+    description: "Repository policy (colon-separated:expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
     required: false
     default: "false:false:false:false:true:false:false"
   deps-policy:
-    description: "Dependencies policy (colon-separated: expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
+    description: "Dependencies policy (colon-separated:expired:email-mismatch:uncertified:missingkey:github-automated:unsigned:unregistered)"
     required: false
     default: "true:true:true:true:true:true:true"
   output-format:
     description: "Output format ('json' or 'console')"
     required: false
-    default: "json"
+    default: "console"
   output-file:
     description: "Output file name for JSON reports"
     required: false
